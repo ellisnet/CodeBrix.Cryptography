@@ -97,6 +97,10 @@ StyleCopReport.xml
 *.rsp
 # but not Directory.Build.rsp, as it configures directory-level build defaults
 !Directory.Build.rsp
+# nor the NIST CAVP test vectors, which use .rsp for "response file" in the
+# request/response sense (.req = inputs, .rsp = expected outputs) - static
+# reference data, unrelated to MSBuild/compiler response files
+!tests/CodeBrix.Cryptography.Tests/data/crypto/cavp/*.rsp
 *.sbr
 *.tlb
 *.tli
