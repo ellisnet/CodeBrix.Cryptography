@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>CodeBrix.Cryptography.Tests</AssemblyName>
+    <!--
+      The test-data files are embedded resources, and the suite looks them up by
+      the logical names "CodeBrix.Cryptography.data.<path>" (see SimpleTest in
+      Utilities/Test). RootNamespace is what MSBuild prefixes onto an embedded
+      resource's path, so it is the library's root namespace here rather than
+      the test assembly name.
+    -->
+    <RootNamespace>CodeBrix.Cryptography</RootNamespace>
+    <!--
+      A cryptography suite has to keep testing the algorithms and APIs the
+      library has deprecated but still ships, so this project deliberately calls
+      [Obsolete] members (Ascon, SPHINCS+, the older CMS generators, and so on)
+      and CS0618 fires on every one. Upstream BouncyCastle suppresses the same
+      warning in its test project for the same reason. CS0618 is the ONLY
+      suppression here, it applies to test code that is never packaged, and no
+      suppression of any kind is applied to the library project.
+    -->
+    <NoWarn>618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="data\**\*.*" Exclude="**\README.txt" />
+  </ItemGroup>
+
+  <!--
+    The repository-local replacement for upstream's external bc-test-data clone. These
+    fixtures are copied next to the test assembly, and SimpleTest resolves them from
+    AppContext.BaseDirectory, so the suite never reaches outside the repository.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\test-data\**\*.*">
+      <Link>test-data\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="SilverAssertions.ApacheLicenseForever" Version="1.0.49" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CodeBrix.Cryptography\CodeBrix.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>

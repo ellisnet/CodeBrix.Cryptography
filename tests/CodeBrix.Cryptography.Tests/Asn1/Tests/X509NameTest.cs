@@ -1,0 +1,1042 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using CodeBrix.Cryptography.Asn1.X500;
+using CodeBrix.Cryptography.Asn1.X500.Style;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Utilities;
+using CodeBrix.Cryptography.Utilities.Collections;
+using CodeBrix.Cryptography.Utilities.Encoders;
+using CodeBrix.Cryptography.Utilities.Test;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Asn1.Tests; //was previously: Org.BouncyCastle.Asn1.Tests;
+
+public class X509NameTest
+    : SimpleTest
+{
+    private static readonly string[] Subjects =
+    {
+        "C=AU,ST=Victoria,L=South Melbourne,O=Connect 4 Pty Ltd,OU=Webserver Team,CN=www2.connect4.com.au,E=webmaster@connect4.com.au",
+        "C=AU,ST=Victoria,L=South Melbourne,O=Connect 4 Pty Ltd,OU=Certificate Authority,CN=Connect 4 CA,E=webmaster@connect4.com.au",
+        "C=AU,ST=QLD,CN=SSLeay/rsa test cert",
+        "C=US,O=National Aeronautics and Space Administration,SERIALNUMBER=16+CN=Steve Schoch",
+        "E=cooke@issl.atl.hp.com,C=US,OU=Hewlett Packard Company (ISSL),CN=Paul A. Cooke",
+        "O=Sun Microsystems Inc,CN=store.sun.com",
+        "unstructuredAddress=192.168.1.33,unstructuredName=pixfirewall.ciscopix.com,CN=pixfirewall.ciscopix.com",
+        "CN=*.canal-plus.com,OU=Provided by TBS INTERNET https://www.tbs-certificats.com/,OU=\\ CANAL \\+,O=CANAL\\+DISTRIBUTION,L=issy les moulineaux,ST=Hauts de Seine,C=FR",
+        "O=Bouncy Castle,CN=www.bouncycastle.org\\ ",
+        "O=Bouncy Castle,CN=c:\\\\fred\\\\bob",
+        "C=AU,O=1,OU=2,T=3,CN=4,SERIALNUMBER=5,STREET=6,SERIALNUMBER=7,L=8,ST=9,SURNAME=10,GIVENNAME=11,INITIALS=12," +
+            "GENERATION=13,UniqueIdentifier=14,BusinessCategory=15,PostalCode=16,DN=17,Pseudonym=18,PlaceOfBirth=19," +
+            "Gender=20,CountryOfCitizenship=21,CountryOfResidence=22,NameAtBirth=23,PostalAddress=24,2.5.4.54=25," +
+            "TelephoneNumber=26,Name=27,E=28,unstructuredName=29,unstructuredAddress=30,E=31,DC=32,UID=33",
+        "C=DE,L=Berlin,O=Wohnungsbaugenossenschaft \\\"Humboldt-Universität\\\" eG,CN=transfer.wbg-hub.de",
+    };
+
+    private static readonly string[] HexSubjects =
+    {
+        "CN=\\20Test\\20X,O=\\20Test,C=GB",         // input
+        "CN=\\ Test X,O=\\ Test,C=GB",              // expected
+        "CN=\\20Test\\20X\\20,O=\\20Test,C=GB",     // input
+        "CN=\\ Test X\\ ,O=\\ Test,C=GB",           // expected
+    };
+
+    public override string Name => "X509Name";
+
+    private static X509Name FromBytes(byte[] bytes) => X509Name.GetInstance(bytes);
+
+    private IAsn1Convertible createEntryValue(
+        DerObjectIdentifier	oid,
+        string				value)
+    {
+        var attrs = new Dictionary<DerObjectIdentifier, string>();
+        attrs.Add(oid, value);
+
+        var ord = new List<DerObjectIdentifier>();
+        ord.Add(oid);
+
+        X509Name name = new X509Name(ord, attrs);
+
+        Asn1Sequence seq = (Asn1Sequence)name.ToAsn1Object();
+        Asn1Set set = (Asn1Set)seq[0];
+        seq = (Asn1Sequence)set[0];
+
+        return seq[1];
+    }
+
+    private IAsn1Convertible createEntryValueFromString(
+        DerObjectIdentifier	oid,
+        string				val)
+    {
+        var attrs = new Dictionary<DerObjectIdentifier, string>();
+        attrs.Add(oid, val);
+
+        var ord = new List<DerObjectIdentifier>(attrs.Keys);
+
+        X509Name name = new X509Name(new X509Name(ord, attrs).ToString());
+
+        Asn1Sequence seq = (Asn1Sequence) name.ToAsn1Object();
+        Asn1Set asn1Set = (Asn1Set) seq[0];
+        seq = (Asn1Sequence) asn1Set[0];
+
+        return seq[1];
+    }
+
+    private void doTestEncodingPrintableString(
+        DerObjectIdentifier	oid,
+        string				value)
+    {
+        IAsn1Convertible converted = createEntryValue(oid, value);
+        if (!(converted is DerPrintableString))
+        {
+            Fail("encoding for " + oid + " not printable string");
+        }
+    }
+
+    private void doTestEncodingIA5String(
+        DerObjectIdentifier oid,
+        string				value)
+    {
+        IAsn1Convertible converted = createEntryValue(oid, value);
+        if (!(converted is DerIA5String))
+        {
+            Fail("encoding for " + oid + " not IA5String");
+        }
+    }
+
+    private void doTestEncodingGeneralizedTime(
+        DerObjectIdentifier	oid,
+        string				val)
+    {
+        IAsn1Convertible converted = createEntryValue(oid, val);
+        if (!(converted is Asn1GeneralizedTime))
+        {
+            Fail("encoding for " + oid + " not GeneralizedTime");
+        }
+        converted = createEntryValueFromString(oid, val);
+        if (!(converted is Asn1GeneralizedTime))
+        {
+            Fail("encoding for " + oid + " not GeneralizedTime");
+        }
+    }
+
+    public override void PerformTest()
+    {
+        BogusEqualsTest();
+        dnQualifierAliasParseTest();
+        stateOrProvinceAliasParseTest();
+
+        doTestEncodingPrintableString(X509Name.C, "AU");
+        doTestEncodingPrintableString(X509Name.SerialNumber, "123456");
+        doTestEncodingPrintableString(X509Name.DnQualifier, "123456");
+        doTestEncodingIA5String(X509Name.EmailAddress, "test@test.com");
+        doTestEncodingIA5String(X509Name.DC, "test");
+        // correct encoding
+        doTestEncodingGeneralizedTime(X509Name.DateOfBirth, "#180F32303032303132323132323232305A");
+        // compatability encoding
+        doTestEncodingGeneralizedTime(X509Name.DateOfBirth, "20020122122220Z");
+
+        //
+        // composite
+        //
+        var attrs = new Dictionary<DerObjectIdentifier, string>();
+        attrs.Add(X509Name.C, "AU");
+        attrs.Add(X509Name.O, "The Legion of the Bouncy Castle");
+        attrs.Add(X509Name.L, "Melbourne");
+        attrs.Add(X509Name.ST, "Victoria");
+        attrs.Add(X509Name.E, "feedback-crypto@bouncycastle.org");
+
+        var order = new List<DerObjectIdentifier>();
+        order.Add(X509Name.C);
+        order.Add(X509Name.O);
+        order.Add(X509Name.L);
+        order.Add(X509Name.ST);
+        order.Add(X509Name.E);
+
+        X509Name name1 = new X509Name(order, attrs);
+
+        if (!name1.Equivalent(name1))
+        {
+            Fail("Failed same object test");
+        }
+
+        if (!name1.Equivalent(name1, true))
+        {
+            Fail("Failed same object test - in Order");
+        }
+
+        X509Name name2 = new X509Name(order, attrs);
+
+        if (!name1.Equivalent(name2))
+        {
+            Fail("Failed same name test");
+        }
+
+        if (!name1.Equivalent(name2, true))
+        {
+            Fail("Failed same name test - in Order");
+        }
+
+        if (name1.GetHashCode() != name2.GetHashCode())
+        {
+            Fail("Failed same name test - in Order");
+        }
+
+        var ord1 = new List<DerObjectIdentifier>();
+
+        ord1.Add(X509Name.C);
+        ord1.Add(X509Name.O);
+        ord1.Add(X509Name.L);
+        ord1.Add(X509Name.ST);
+        ord1.Add(X509Name.E);
+
+        var ord2 = new List<DerObjectIdentifier>();
+
+        ord2.Add(X509Name.E);
+        ord2.Add(X509Name.ST);
+        ord2.Add(X509Name.L);
+        ord2.Add(X509Name.O);
+        ord2.Add(X509Name.C);
+
+        name1 = new X509Name(ord1, attrs);
+        name2 = new X509Name(ord2, attrs);
+
+        if (!name1.Equivalent(name2))
+        {
+            Fail("Failed reverse name test");
+        }
+
+        // FIXME Sort out X509Name hashcode problem
+        //if (name1.GetHashCode() != name2.GetHashCode())
+        //{
+        //    Fail("Failed reverse name test GetHashCode");
+        //}
+
+        if (name1.Equivalent(name2, true))
+        {
+            Fail("Failed reverse name test - in Order");
+        }
+
+        if (!name1.Equivalent(name2, false))
+        {
+            Fail("Failed reverse name test - in Order false");
+        }
+
+        var oids = name1.GetOidList();
+        if (!CompareVectors(oids, ord1))
+        {
+            Fail("oid comparison test");
+        }
+
+        var val1 = new List<string>();
+
+        val1.Add("AU");
+        val1.Add("The Legion of the Bouncy Castle");
+        val1.Add("Melbourne");
+        val1.Add("Victoria");
+        val1.Add("feedback-crypto@bouncycastle.org");
+
+        name1 = new X509Name(ord1, val1);
+
+        var values = name1.GetValueList();
+        if (!CompareVectors(values, val1))
+        {
+            Fail("value comparison test");
+        }
+
+        ord2 = new List<DerObjectIdentifier>();
+
+        ord2.Add(X509Name.ST);
+        ord2.Add(X509Name.ST);
+        ord2.Add(X509Name.L);
+        ord2.Add(X509Name.O);
+        ord2.Add(X509Name.C);
+
+        name1 = new X509Name(ord1, attrs);
+        name2 = new X509Name(ord2, attrs);
+
+        if (name1.Equivalent(name2))
+        {
+            Fail("Failed different name test");
+        }
+
+        ord2 = new List<DerObjectIdentifier>();
+
+        ord2.Add(X509Name.ST);
+        ord2.Add(X509Name.L);
+        ord2.Add(X509Name.O);
+        ord2.Add(X509Name.C);
+
+        name1 = new X509Name(ord1, attrs);
+        name2 = new X509Name(ord2, attrs);
+
+        if (name1.Equivalent(name2))
+        {
+            Fail("Failed subset name test");
+        }
+
+        CompositeTest();
+
+        CountryCodeLengthTest();
+
+        //
+        // getValues test
+        //
+        var v1 = name1.GetValueList(X509Name.O);
+
+        if (v1.Count != 1 || !v1[0].Equals("The Legion of the Bouncy Castle"))
+        {
+            Fail("O test failed");
+        }
+
+        var v2 = name1.GetValueList(X509Name.L);
+
+        if (v2.Count != 1 || !v2[0].Equals("Melbourne"))
+        {
+            Fail("L test failed");
+        }
+
+        //
+        // general subjects test
+        //
+        for (int i = 0; i != Subjects.Length; i++)
+        {
+            var subject = Subjects[i];
+            var name = new X509Name(subject);
+
+            var decodedName = FromBytes(name.GetEncoded());
+            var decodedSubject = decodedName.ToString();
+
+            if (!subject.Equals(decodedSubject))
+            {
+                Fail("Failed regeneration test " + i + " got: " + decodedSubject + " expected " + subject);
+            }
+        }
+
+        for (int i = 0; i < HexSubjects.Length; i += 2)
+        {
+            var subject = HexSubjects[i];
+            var expected = HexSubjects[i + 1];
+
+            var name = new X509Name(subject);
+            var decodedName = FromBytes(name.GetEncoded());
+            var decodedSubject = decodedName.ToString();
+
+            if (!expected.Equals(decodedSubject))
+            {
+                Fail("Failed hex regeneration test " + i + " got: " + decodedSubject + " expected " + expected);
+            }
+        }
+
+        //
+        // sort test
+        //
+        X509Name unsorted = new X509Name("SERIALNUMBER=BBB + CN=AA");
+
+        if (!FromBytes(unsorted.GetEncoded()).ToString().Equals("CN=AA+SERIALNUMBER=BBB"))
+        {
+            Fail("Failed sort test 1");
+        }
+
+        unsorted = new X509Name("CN=AA + SERIALNUMBER=BBB");
+
+        if (!FromBytes(unsorted.GetEncoded()).ToString().Equals("CN=AA+SERIALNUMBER=BBB"))
+        {
+            Fail("Failed sort test 2");
+        }
+
+        unsorted = new X509Name("SERIALNUMBER=B + CN=AA");
+
+        if (!FromBytes(unsorted.GetEncoded()).ToString().Equals("SERIALNUMBER=B+CN=AA"))
+        {
+            Fail("Failed sort test 3");
+        }
+
+        unsorted = new X509Name("CN=AA + SERIALNUMBER=B");
+
+        if (!FromBytes(unsorted.GetEncoded()).ToString().Equals("SERIALNUMBER=B+CN=AA"))
+        {
+            Fail("Failed sort test 4");
+        }
+
+        //
+        // equality tests
+        //
+        equalityTest(new X509Name("CN=The     Legion"), new X509Name("CN=The Legion"));
+        equalityTest(new X509Name("CN=   The Legion"), new X509Name("CN=The Legion"));
+        equalityTest(new X509Name("CN=The Legion   "), new X509Name("CN=The Legion"));
+        equalityTest(new X509Name("CN=  The     Legion "), new X509Name("CN=The Legion"));
+        equalityTest(new X509Name("CN=  the     legion "), new X509Name("CN=The Legion"));
+
+        // # test
+
+        X509Name n1 = new X509Name("SERIALNUMBER=8,O=ABC,CN=ABC Class 3 CA,C=LT");
+        X509Name n2 = new X509Name("2.5.4.5=8,O=ABC,CN=ABC Class 3 CA,C=LT");
+        X509Name n3 = new X509Name("2.5.4.5=#130138,O=ABC,CN=ABC Class 3 CA,C=LT");
+
+        equalityTest(n1, n2);
+        equalityTest(n2, n3);
+        equalityTest(n3, n1);
+
+        n1 = new X509Name(true, "2.5.4.5=#130138,CN=SSC Class 3 CA,O=UAB Skaitmeninio sertifikavimo centras,C=LT");
+        n2 = new X509Name(true, "SERIALNUMBER=#130138,CN=SSC Class 3 CA,O=UAB Skaitmeninio sertifikavimo centras,C=LT");
+        n3 = X509Name.GetInstance(Asn1Object.FromByteArray(Hex.Decode("3063310b3009060355040613024c54312f302d060355040a1326"
+            + "55414220536b6169746d656e696e696f20736572746966696b6176696d6f2063656e74726173311730150603550403130e53534320436c6173732033204341310a30080603550405130138")));
+
+        equalityTest(n1, n2);
+        equalityTest(n2, n3);
+        equalityTest(n3, n1);
+
+        n1 = new X509Name("SERIALNUMBER=8,O=XX,CN=ABC Class 3 CA,C=LT");
+        n2 = new X509Name("2.5.4.5=8,O=,CN=ABC Class 3 CA,C=LT");
+
+        if (n1.Equivalent(n2))
+        {
+            Fail("empty inequality check failed");
+        }
+
+        n1 = new X509Name("SERIALNUMBER=8,O=,CN=ABC Class 3 CA,C=LT");
+        n2 = new X509Name("2.5.4.5=8,O=,CN=ABC Class 3 CA,C=LT");
+
+        equalityTest(n1, n2);
+
+        equalityTest(new X509Name(""), new X509Name(""));
+
+        //
+        // inequality to sequences
+        //
+        name1 = new X509Name("CN=The Legion");
+
+        if (name1.Equals(DerSequence.Empty))
+        {
+            Fail("inequality test with sequence");
+        }
+
+        if (name1.Equals(DerSequence.FromElement(DerSet.Empty)))
+        {
+            Fail("inequality test with sequence and set");
+        }
+
+        Asn1EncodableVector v = new Asn1EncodableVector(
+            new DerObjectIdentifier("1.1"),
+            new DerObjectIdentifier("1.1"));
+
+        if (name1.Equals(DerSequence.FromElement(DerSet.FromElement(DerSet.FromVector(v)))))
+        {
+            Fail("inequality test with sequence and bad set");
+        }
+
+        //if (name1.Equals(new DerSequence(new DerSet(new DerSet(v))), true))
+        //{
+        //    Fail("inequality test with sequence and bad set");
+        //}
+        try
+        {
+            X509Name.GetInstance(DerSequence.FromElement(DerSet.FromElement(DerSet.FromVector(v))));
+            Fail("GetInstance should reject bad sequence");
+        }
+        catch (ArgumentException)
+        {
+            //expected
+        }
+
+        if (name1.Equals(DerSequence.FromElement(DerSet.FromElement(DerSequence.Empty))))
+        {
+            Fail("inequality test with sequence and short sequence");
+        }
+
+        //if (name1.Equals(new DerSequence(new DerSet(DerSequence.Empty)), true))
+        //{
+        //    Fail("inequality test with sequence and short sequence");
+        //}
+        try
+        {
+            X509Name.GetInstance(DerSequence.FromElement(DerSet.FromElement(DerSequence.Empty)));
+            Fail("GetInstance should reject short sequence");
+        }
+        catch (ArgumentException)
+        {
+            //expected
+        }
+
+        v = new Asn1EncodableVector(
+            new DerObjectIdentifier("1.1"),
+            DerSequence.Empty);
+
+        if (name1.Equals(DerSequence.FromElement(DerSet.FromElement(new DerSequence(v)))))
+        {
+            Fail("inequality test with sequence and bad sequence");
+        }
+
+        if (name1.Equivalent(null))
+        {
+            Fail("inequality test with null");
+        }
+
+        if (name1.Equivalent(null, true))
+        {
+            Fail("inequality test with null");
+        }
+
+        //
+        // this is contrived but it checks sorting of sets with equal elements
+        //
+        unsorted = new X509Name("CN=AA + CN=AA + CN=AA");
+
+        //
+        // tagging test - only works if CHOICE implemented
+        //
+        /*
+        Asn1TaggedObject tag = new DerTaggedObject(false, 1, new X509Name("CN=AA"));
+
+        if (!tag.IsExplicit())
+        {
+            Fail("failed to explicitly tag CHOICE object");
+        }
+
+        X509Name name = X509Name.GetTagged(tag, false);
+
+        if (!name.Equals(new X509Name("CN=AA")))
+        {
+            Fail("failed to recover tagged name");
+        }
+        */
+
+        DerUtf8String testString = new DerUtf8String("The Legion of the Bouncy Castle");
+        byte[] encodedBytes = testString.GetEncoded();
+        string hexEncodedString = "#" + Hex.ToHexString(encodedBytes);
+
+        DerUtf8String converted = (DerUtf8String)
+            new X509DefaultEntryConverter().GetConvertedValue(
+            X509Name.L , hexEncodedString);
+
+        if (!converted.Equals(testString))
+        {
+            Fail("Failed X509DefaultEntryConverter test");
+        }
+
+        //
+        // try escaped.
+        //
+        converted = (DerUtf8String) new X509DefaultEntryConverter().GetConvertedValue(
+            X509Name.L , "\\" + hexEncodedString);
+
+        if (!converted.Equals(new DerUtf8String(hexEncodedString)))
+        {
+            Fail("Failed X509DefaultEntryConverter test got " + converted + " expected: " + hexEncodedString);
+        }
+
+        //
+        // try a weird value
+        //
+        X509Name n = new X509Name("CN=\\#nothex#string");
+
+        if (!n.ToString().Equals("CN=\\#nothex#string"))
+        {
+            Fail("# string not properly escaped.");
+        }
+
+        var vls = n.GetValueList(X509Name.CN);
+        if (vls.Count != 1 || !vls[0].Equals("#nothex#string"))
+        {
+            Fail("Escaped # not reduced properly");
+        }
+
+        n = new X509Name("CN=\"a+b\"");
+
+        vls = n.GetValueList(X509Name.CN);
+        if (vls.Count != 1 || !vls[0].Equals("a+b"))
+        {
+            Fail("Escaped + not reduced properly");
+        }
+
+        n = new X509Name("CN=a\\+b");
+
+        vls = n.GetValueList(X509Name.CN);
+        if (vls.Count != 1 || !vls[0].Equals("a+b"))
+        {
+            Fail("Escaped + not reduced properly");
+        }
+
+        if (!n.ToString().Equals("CN=a\\+b"))
+        {
+            Fail("+ in string not properly escaped.");
+        }
+
+        n = new X509Name("CN=a\\=b");
+
+        vls = n.GetValueList(X509Name.CN);
+        if (vls.Count != 1 || !vls[0].Equals("a=b"))
+        {
+            Fail("Escaped = not reduced properly");
+        }
+
+        if (!n.ToString().Equals("CN=a\\=b"))
+        {
+            Fail("= in string not properly escaped.");
+        }
+
+        n = new X509Name("TELEPHONENUMBER=\"+61999999999\"");
+
+        vls = n.GetValueList(X509Name.TelephoneNumber);
+        if (vls.Count != 1 || !vls[0].Equals("+61999999999"))
+        {
+            Fail("telephonenumber escaped + not reduced properly");
+        }
+
+        n = new X509Name("TELEPHONENUMBER=\\+61999999999");
+
+        vls = n.GetValueList(X509Name.TelephoneNumber);
+        if (vls.Count != 1 || !vls[0].Equals("+61999999999"))
+        {
+            Fail("telephonenumber escaped + not reduced properly");
+        }
+
+        n = new X509Name(@"TELEPHONENUMBER=\+61999999999");
+
+        vls = n.GetValueList(X509Name.TelephoneNumber);
+        if (vls.Count != 1 || !vls[0].Equals("+61999999999"))
+        {
+            Fail("telephonenumber escaped + not reduced properly");
+        }
+
+        IsTrue(X509Name.JurisdictionC.Equals(
+            CollectionUtilities.GetValueOrNull(X509Name.DefaultLookup, "jurisdictionCountry")));
+        IsTrue(X509Name.JurisdictionST.Equals(
+            CollectionUtilities.GetValueOrNull(X509Name.DefaultLookup, "jurisdictionState")));
+        IsTrue(X509Name.JurisdictionL.Equals(
+            CollectionUtilities.GetValueOrNull(X509Name.DefaultLookup, "jurisdictionLocality")));
+    }
+
+    /**
+     * BCStyle / RFC4519Style now accept "DN", "DNQ" and "dnQualifier"
+     * as parser aliases for the dnQualifier attribute (OID 2.5.4.46).
+     * The motivating case was that {@code java.security.cert.X509Certificate.getSubjectX500Principal().toString()}
+     * emits "DNQ=" on some JDKs (Amazon Corretto 17 observed) and
+     * "DNQUALIFIER=" on others, neither of which round-tripped through
+     * {@code new X500Name(principal.toString())} under BCStyle's
+     * historical "DN" form (issue #1622).
+     */
+    private void dnQualifierAliasParseTest()
+    {
+        string[] aliases = { "DN", "DNQ", "dnQualifier", "dn", "dnq", "dnqualifier" };
+        foreach (var alias in aliases)
+        {
+            X509Name name = new X509Name("CN=Foo," + alias + "=ABC123");
+
+            if (1 != name.GetValueList(X509Name.DnQualifier).Count)
+            {
+                Fail("X509Name: alias '" + alias + "' did not parse to a single dnQualifier RDN");
+            }
+        }
+    }
+
+    /**
+     * BCStyle / RFC4519Style now accept "S" as a parser alias for the
+     * stateOrProvinceName attribute (OID 2.5.4.8), in addition to the
+     * RFC 2253/4514 short form "ST". Microsoft's CertNameToStr emits "S="
+     * for 2.5.4.8 ("This value is different from the RFC 1779 X.500 key
+     * name ('ST')."), so DN strings produced by Windows tooling did not
+     * round-trip through {@code new X500Name(...)}. Output still uses the
+     * canonical "ST" symbol (issue #1301).
+     */
+    private void stateOrProvinceAliasParseTest()
+    {
+        foreach (var alias in new string[]{ "ST", "st", "S", "s" })
+        {
+            X509Name name = new X509Name("CN=Foo," + alias + "=California");
+            var stValues = name.GetValueList(X509Name.ST);
+            if (stValues.Count != 1)
+            {
+                Fail("Alias '" + alias + "' did not parse to a single stateOrProvinceName RDN");
+            }
+        }
+
+        // output uses the canonical "ST" symbol regardless of the input alias
+        X509Name fromS = new X509Name("CN=Foo,S=California");
+        if (fromS.ToString() != "CN=Foo,ST=California")
+        {
+            Fail("'S' alias did not normalise to ST on output, got: " + fromS);
+        }
+    }
+
+    private void BogusEqualsTest()
+    {
+        // RFC 4514 sec. 3 allows '=' (0x3D) in stringchar without escaping;
+        // only the FIRST '=' separates attributeType from attributeValue.
+        // (issue #2226 - matches javax.security.auth.x500.X500Principal)
+        string[] subjects =
+        {
+            "CN=foo=bar",
+            "CN==^_^=",
+            "CN=a=b=c",
+            "CN=\\=^_^\\=",
+        };
+        string[] expectedValues =
+        {
+            "foo=bar",
+            "=^_^=",
+            "a=b=c",
+            "=^_^=",
+        };
+
+        for (int i = 0; i != subjects.Length; i++)
+        {
+            X509Name name = new X509Name(subjects[i]);
+            string value = name.GetValueList()[0];
+            IsEquals("unexpected value for " + subjects[i], expectedValues[i], value);
+        }
+
+        // a token with no '=' at all is still a malformed RDN
+        try
+        {
+            new X509Name("CN");
+            Fail("no exception");
+        }
+        catch (ArgumentException e)
+        {
+            IsEquals("badly formatted directory string", e.Message);
+        }
+    }
+
+    /*
+     * RFC 4514 sec. 2.4 lets any byte be escaped as \HH, and the underlying
+     * directoryString is UTF-8 (RFC 5280 sec. 4.1.2.4). A run of consecutive
+     * \HH escapes is therefore a UTF-8 byte sequence, never one Java char per
+     * pair (issue #1061).
+     */
+    [Fact]
+    public void HexEscapedUtf8Parse()
+    {
+        string[] subjects =
+        {
+            "CN=Lu\\C4\\8Di\\C4\\87",        // Lučić
+            "CN=M\\C3\\B6rsky",              // Mörsky
+            "CN=\\E6\\97\\A5\\E6\\9C\\AC",   // 日本 (three-byte UTF-8)
+            "CN=Lu\\C4\\8Di\\C4\\87,O=Acme", // RDN separator flushes the run
+        };
+        string[] expectedValues =
+        {
+            "Lučić",
+            "Mörsky",
+            "日本",
+            "Lučić",
+        };
+
+        for (int i = 0; i != subjects.Length; i++)
+        {
+            var subject = subjects[i];
+            X509Name name = new X509Name(subject);
+            string val = GetFirstRdnValueString(name);
+            Assert.Equal(expectedValues[i], val);
+
+            X509Name reparsed = FromBytes(name.GetEncoded());
+            string reVal = GetFirstRdnValueString(reparsed);
+            Assert.Equal(expectedValues[i], reVal);
+        }
+
+        // A lone leading byte without its continuation byte is malformed UTF-8.
+        try
+        {
+            new X509Name("CN=Lu\\C4");
+            Assert.Fail("malformed UTF-8 escape sequence not rejected");
+        }
+        catch (ArgumentException)
+        {
+            // expected
+        }
+    }
+
+    private void CountryCodeLengthTest()
+    {
+        var converter = new X509DefaultEntryConverter();
+
+        // Positive cases: 2-character codes are accepted.
+
+        converter.GetConvertedValue(X509Name.C, "US");
+        converter.GetConvertedValue(X509Name.JurisdictionC, "US");
+        new X509Name("C=AU");
+
+        DerObjectIdentifier[] countryOids = { X509Name.C, X509Name.JurisdictionC };
+        string[] badValues = { "USA", "U", "" };
+
+        for (int i = 0; i != countryOids.Length; ++i)
+        {
+            for (int j = 0; j != badValues.Length; ++j)
+            {
+                try
+                {
+                    converter.GetConvertedValue(countryOids[i], badValues[j]);
+                    Fail($"country code attribute {countryOids[i]} accepted '{badValues[j]}'");
+                }
+                catch (ArgumentException)
+                {
+                    // expected
+                }
+            }
+        }
+
+        try
+        {
+            new X509Name("C=USA");
+            Fail("X509Name(\"C=USA\") accepted 3-character country code");
+        }
+        catch (ArgumentException)
+        {
+            // expected
+        }
+
+        // Parsing existing DER with a non-conforming country code is
+        // deliberately still permitted (leniency boundary): we don't want
+        // to block reading already-issued certificates in the wild.
+        X509Name parsed = X509Name.GetInstance(
+            new DerSequence(new DerSet(new DerSequence(X509Name.C, new DerPrintableString("USA")))));
+        if (!"USA".Equals(parsed.GetValueList(X509Name.C)[0]))
+        {
+            Fail("lenient parse of 3-character C failed: " + parsed);
+        }
+    }
+
+    private void CompositeTest()
+    {
+        //
+        // composite test
+        //
+        byte[] enc = Hex.Decode("305e310b300906035504061302415531283026060355040a0c1f546865204c6567696f6e206f662074686520426f756e637920436173746c653125301006035504070c094d656c626f75726e653011060355040b0c0a4173636f742056616c65");
+        X509Name n = X509Name.GetInstance(Asn1Object.FromByteArray(enc));
+
+        if (!n.ToString().Equals("C=AU,O=The Legion of the Bouncy Castle,L=Melbourne+OU=Ascot Vale"))
+        {
+            Fail("Failed composite to string test got: " + n.ToString());
+        }
+
+        var symbols = X509Name.DefaultSymbols;
+        if (!n.ToString(true, symbols).Equals("L=Melbourne+OU=Ascot Vale,O=The Legion of the Bouncy Castle,C=AU"))
+        {
+            Fail("Failed composite to string test got: " + n.ToString(true, symbols));
+        }
+
+        n = new X509Name(true, "L=Melbourne+OU=Ascot Vale,O=The Legion of the Bouncy Castle,C=AU");
+        if (!n.ToString().Equals("C=AU,O=The Legion of the Bouncy Castle,L=Melbourne+OU=Ascot Vale"))
+        {
+            Fail("Failed composite to string reversal test got: " + n.ToString());
+        }
+
+        n = new X509Name("C=AU, O=The Legion of the Bouncy Castle, L=Melbourne + OU=Ascot Vale");
+
+        byte[] enc2 = n.GetEncoded();
+
+        if (!Arrays.AreEqual(enc, enc2))
+        {
+            Fail("Failed composite string to encoding test");
+        }
+
+        //
+        // dud name test - handle empty DN without barfing.
+        //
+        n = new X509Name("C=CH,O=,OU=dummy,CN=mail@dummy.com");
+
+        n = X509Name.GetInstance(Asn1Object.FromByteArray(n.GetEncoded()));
+    }
+
+    private void equalityTest(
+        X509Name	x509Name,
+        X509Name	x509Name1)
+    {
+        if (!x509Name.Equivalent(x509Name1))
+        {
+            Fail("equality test failed for " + x509Name + " : " + x509Name1);
+        }
+
+        // FIXME Sort out X509Name hashcode problem
+        //if (x509Name.GetHashCode() != x509Name1.GetHashCode())
+        //{
+        //    Fail("GetHashCode test failed for " + x509Name + " : " + x509Name1);
+        //}
+
+        if (!x509Name.Equivalent(x509Name1, true))
+        {
+            Fail("equality test failed for " + x509Name + " : " + x509Name1);
+        }
+    }
+
+    private bool CompareVectors<T>(IList<T> one, IList<T> two)
+    {
+        if (one.Count != two.Count)
+            return false;
+
+        for (int i = 0; i < one.Count; ++i)
+        {
+            if (!Equals(one[i], two[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    [Fact]
+    public void TestFunction()
+    {
+        string resultText = Perform().ToString();
+
+        Assert.Equal(Name + ": Okay", resultText);
+    }
+
+    [Fact]
+    public void CommonNameLength()
+    {
+        // 64 chars: at the boundary, must be accepted.
+        string cn64 = Repeat("A", 64);
+        // TODO X500NameBuilder tests per style
+        new X509Name("CN=" + cn64);
+
+        // 65 chars: just over, must be rejected by both styles + the string constructor.
+        string cn65 = Repeat("A", 65);
+
+        // TODO X500NameBuilder tests per style
+        Assert.Throws<ArgumentException>(() => new X509Name("CN=" + cn65));
+
+        // Parsing existing DER with an over-length CN is deliberately
+        // still permitted: don't block reading already-issued certificates
+        // in the wild (leniency boundary, matches the country-code split).
+        var atav = new AttributeTypeAndValue(X509Name.CN, new DerUtf8String(cn65));
+        var rdn = new Rdn(atav);
+        var parsed = X509Name.GetInstance(DerSequence.FromElement(rdn));
+        Assert.Equal(cn65, GetFirstRdnValueString(parsed));
+    }
+
+    [Fact]
+    public void EscapeRoundTrip()
+    {
+        string[,] cases =
+        {
+            // input                value (after unescape)   canonical toString
+            { "CN=a\\,b",           "a,b",                   "CN=a\\,b" },          // escaped comma (RDN separator)
+            { "CN=a\\;b",           "a;b",                   "CN=a\\;b" },          // escaped semicolon (legacy separator)
+            { "CN=a\\<b",           "a<b",                   "CN=a\\<b" },          // escaped less-than
+            { "CN=a\\>b",           "a>b",                   "CN=a\\>b" },          // escaped greater-than
+            { "CN=a\\\\b",          "a\\b",                  "CN=a\\\\b" },         // escaped backslash
+            { "CN=a\\+b",           "a+b",                   "CN=a\\+b" },          // escaped plus (multi-value separator)
+            { "CN=a\\=b",           "a=b",                   "CN=a\\=b" },          // escaped equals
+            { "CN=a\\\"b",          "a\"b",                  "CN=a\\\"b" },         // escaped quote mid-value
+            { "CN=a\\ b",           "a b",                   "CN=a b" },            // escaped interior space (kept, not trimmed)
+            { "CN=\"a,b\"",         "a,b",                   "CN=a\\,b" },          // quoting protects the comma separator
+            { "CN=\"a;b\"",         "a;b",                   "CN=a\\;b" },          // quoting protects the semicolon
+            { "CN=\"a+b\"",         "a+b",                   "CN=a\\+b" },          // quoting protects the plus
+            { "CN=\"a\\b\"",        "a\\b",                  "CN=a\\\\b" },         // backslash is literal inside quotes
+            { "CN=   a\\+b",        "a+b",                   "CN=a\\+b" },          // leading unescaped spaces are skipped
+            { "CN=\\C3\\A9\\+",     "é+",                    "CN=é\\+" },      // hex UTF-8 run flushed before escaped special
+        };
+
+        for (int i = 0; i != cases.GetLength(0); i++)
+        {
+            string input = cases[i, 0];
+
+            X509Name name = new X509Name(input);
+            string val = GetFirstRdnValueString(name);
+            Assert.Equal(cases[i, 1], val);
+
+            string str = name.ToString();
+            Assert.Equal(cases[i, 2], str);
+
+            // re-parsing the canonical form must yield the same attributeValue
+            //X509Name reparsed = FromBytes(name.GetEncoded());
+            string reVal = GetFirstRdnValueString(new X509Name(str));
+            Assert.Equal(cases[i, 1], reVal);
+        }
+
+        // An empty value still parses to an empty string.
+        Assert.Equal("", GetFirstRdnValueString(new X509Name("CN=")));
+
+        // Running out of input while still escaping or quoting is malformed. The
+        // unterminated-quote and dangling-bare-backslash cases are caught by
+        // X500NameTokenizer.nextToken() (escaped/quoted unbalanced at token end);
+        // the incomplete-hexpair cases are invisible to the tokenizer (\C looks
+        // like a balanced escape) and are caught by IETFUtils.unescape itself.
+        // A '\' beginning a hexpair (RFC 4514 sec. 2.4) that isn't completed by a
+        // second hex digit used to silently drop the partial digit (and leak state
+        // into a later escape); it must throw.
+        string[] malformed =
+        {
+            "CN=a\\Cz",     // single hex digit then a letter
+            "CN=a\\C,O=x",  // single hex digit then the RDN separator
+            "CN=a\\C b",    // single hex digit then a space
+            "CN=ab\\C",     // single hex digit at end of input
+            "CN=a\\C\"b\"", // single hex digit then a quote
+            "CN=\\Cz\\AB",  // partial digit must not corrupt a following valid escape
+            "CN=abc\\",     // dangling bare backslash at end of input (tokenizer)
+            "O=x,CN=abc\\", // dangling bare backslash after a prior RDN (tokenizer)
+            "CN=\"abc",     // unterminated quote at end of input (tokenizer)
+            "CN=\"abc,O=x", // unterminated quote spanning the RDN separator (tokenizer)
+            "CN=\"",        // lone opening quote (tokenizer)
+        };
+        for (int i = 0; i != malformed.Length; i++)
+        {
+            try
+            {
+                new X509Name(malformed[i]);
+                Assert.Fail("malformed hex escape not rejected: " + malformed[i]);
+            }
+            catch (ArgumentException)
+            {
+                // expected
+            }
+        }
+    }
+
+    /// <summary>
+    /// <see cref="IetfUtilities.Canonicalize"/> and <see cref="X509Name.Equivalent"/> fold case through the
+    /// culture-independent <see cref="string.ToLowerInvariant"/>, not <see cref="string.ToLower"/>. Under the
+    /// Turkish <see cref="CultureInfo"/> <c>"IT".ToLower()</c> yields "ıt" (dotless i), which would make c=IT and
+    /// c=it canonicalize differently and compare not-equivalent. This pins the behaviour to ASCII case-folding
+    /// regardless of <c>CultureInfo.CurrentCulture</c>.
+    /// </summary>
+    [Fact]
+    public void TurkishCultureCanonicalizeTest()
+    {
+        var turkish = CultureInfo.GetCultureInfo("tr-TR");
+
+        // Precondition: confirm the runtime's Turkish locale really does the dotless-i fold
+        // ("IT".ToLower() -> "ıt", not "it"), otherwise the test would pass vacuously.
+        Assert.SkipUnless("IT".ToLower(turkish) != "it",
+            "This runtime's tr-TR locale does not perform the dotless-i fold.");
+
+        var originalCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = turkish;
+
+            Assert.Equal("it", IetfUtilities.Canonicalize("IT"));
+
+            X509Name upper = new X509Name("CN=ITALY,C=IT");
+            X509Name lower = new X509Name("CN=italy,C=it");
+
+            Assert.True(upper.Equivalent(lower), "X509Name equivalence is culture-sensitive under Turkish locale");
+
+            // NB: No hashcode method corresponding to X509Name.Equivalent
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    private static Rdn GetFirstRdn(X509Name name) => Rdn.GetInstance(((Asn1Sequence)name.ToAsn1Object())[0]);
+
+    private static string GetFirstRdnValueString(X509Name name) => GetFirstValueString(GetFirstRdn(name));
+
+    private static string GetFirstValueString(Rdn rdn) => ((IAsn1String)rdn.GetFirst().Value).GetString();
+
+    private static string Repeat(string s, int n)
+    {
+        StringBuilder sb = new StringBuilder(s.Length * n);
+        for (int i = 0; i < n; i++)
+        {
+            sb.Append(s);
+        }
+        return sb.ToString();
+    }
+}

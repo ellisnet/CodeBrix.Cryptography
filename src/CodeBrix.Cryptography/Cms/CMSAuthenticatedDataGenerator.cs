@@ -1,0 +1,142 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Asn1;
+using CodeBrix.Cryptography.Asn1.Cms;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Crypto.IO;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Security;
+using CodeBrix.Cryptography.Utilities.IO;
+
+namespace CodeBrix.Cryptography.Cms; //was previously: Org.BouncyCastle.Cms;
+
+/**
+ * General class for generating a CMS authenticated-data message.
+ *
+ * A simple example of usage.
+ *
+ * <pre>
+ *      CMSAuthenticatedDataGenerator  fact = new CMSAuthenticatedDataGenerator();
+ *
+ *      fact.addKeyTransRecipient(cert);
+ *
+ *      CMSAuthenticatedData         data = fact.generate(content, algorithm, "BC");
+ * </pre>
+ */
+public class CmsAuthenticatedDataGenerator
+    : CmsAuthenticatedGenerator
+{
+    public CmsAuthenticatedDataGenerator()
+    {
+    }
+
+    /// <summary>Constructor allowing specific source of randomness</summary>
+    /// <param name="random">Instance of <c>SecureRandom</c> to use.</param>
+    public CmsAuthenticatedDataGenerator(SecureRandom random)
+        : base(random)
+    {
+    }
+
+    /// <summary>Generate an authenticated object that contains an CMS Authenticated Data object.</summary>
+    [Obsolete("Use 'Generate(CmsTypedData, DerObjectIdentifier)' instead")]
+    public CmsAuthenticatedData Generate(CmsProcessable content, string encryptionOid) =>
+        Generate(CmsUtilities.GetTypedData(content), new DerObjectIdentifier(encryptionOid));
+
+    /// <summary>Generate an authenticated object that contains an CMS Authenticated Data object.</summary>
+    public CmsAuthenticatedData Generate(CmsTypedData content, DerObjectIdentifier macOid)
+    {
+        try
+        {
+            // FIXME Will this work for macs?
+            CipherKeyGenerator keyGen = GeneratorUtilities.GetKeyGenerator(macOid);
+
+            keyGen.Init(new KeyGenerationParameters(m_random, keyGen.DefaultStrength));
+
+            return Generate(content, macOid, keyGen);
+        }
+        catch (SecurityUtilityException e)
+        {
+            throw new CmsException("can't find key generation algorithm.", e);
+        }
+    }
+
+    /**
+     * generate an enveloped object that contains an CMS Enveloped Data
+     * object using the given provider and the passed in key generator.
+     */
+    private CmsAuthenticatedData Generate(CmsProcessable content, DerObjectIdentifier macOid, CipherKeyGenerator keyGen)
+    {
+        AlgorithmIdentifier macAlgID;
+        KeyParameter encKey;
+        Asn1OctetString encContent;
+        Asn1OctetString macResult;
+
+        try
+        {
+            // FIXME Will this work for macs?
+            byte[] encKeyBytes = keyGen.GenerateKey();
+            encKey = ParameterUtilities.CreateKeyParameter(macOid, encKeyBytes);
+
+#pragma warning disable CS0618 // Type or member is obsolete
+            Asn1Encodable asn1Params = GenerateAsn1Parameters(macOid.GetID(), encKeyBytes);
+
+            macAlgID = GetAlgorithmIdentifier(macOid.GetID(), encKey, asn1Params, out var cipherParameters);
+#pragma warning restore CS0618 // Type or member is obsolete
+
+            IMac mac = MacUtilities.GetMac(macOid);
+            // TODO Confirm no ParametersWithRandom needed
+            // FIXME Only passing key at the moment
+            //mac.Init(cipherParameters);
+            mac.Init(encKey);
+
+            var bOut = new MemoryStream();
+            using (var mOut = new TeeOutputStream(bOut, new MacSink(mac)))
+            {
+                content.Write(mOut);
+            }
+
+            encContent = new BerOctetString(bOut.ToArray());
+
+            byte[] macOctets = MacUtilities.DoFinal(mac);
+            macResult = new DerOctetString(macOctets);
+        }
+        catch (SecurityUtilityException e)
+        {
+            throw new CmsException("couldn't create cipher.", e);
+        }
+        catch (InvalidKeyException e)
+        {
+            throw new CmsException("key invalid in message.", e);
+        }
+        catch (IOException e)
+        {
+            throw new CmsException("exception decoding algorithm parameters.", e);
+        }
+
+        DerSet recipientInfos;
+        try
+        {
+            recipientInfos = DerSet.Map(recipientInfoGenerators, rig => rig.Generate(encKey, m_random));
+        }
+        catch (InvalidKeyException e)
+        {
+            throw new CmsException("key inappropriate for algorithm.", e);
+        }
+        catch (GeneralSecurityException e)
+        {
+            throw new CmsException("error making encrypted content.", e);
+        }
+
+        var eci = new ContentInfo(CmsObjectIdentifiers.Data, encContent);
+
+        var originatorInfo = m_originatorInformation?.ToAsn1Structure();
+
+        var authenticatedData = new AuthenticatedData(originatorInfo, recipientInfos, macAlgID, null, eci, null,
+            macResult, null);
+
+        var contentInfo = new ContentInfo(CmsObjectIdentifiers.AuthenticatedData, authenticatedData);
+
+        return new CmsAuthenticatedData(contentInfo);
+    }
+}

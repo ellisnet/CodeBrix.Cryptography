@@ -1,0 +1,162 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Math.EC.Rfc8032;
+
+namespace CodeBrix.Cryptography.Crypto.Signers; //was previously: Org.BouncyCastle.Crypto.Signers;
+
+/// <summary>
+/// Ed25519ctx (RFC 8032 §5.1) signature primitive: pure Ed25519 with a domain-separation context
+/// of up to 255 bytes captured at construction.
+/// </summary>
+public class Ed25519ctxSigner
+    : ISigner
+{
+    private readonly Buffer buffer = new Buffer();
+    private readonly byte[] context;
+
+    private bool forSigning;
+    private Ed25519PrivateKeyParameters privateKey;
+    private Ed25519PublicKeyParameters publicKey;
+
+    /// <summary>
+    /// Construct an Ed25519ctx signer bound to the supplied <paramref name="context"/>. The context
+    /// bytes are cloned so the caller may mutate the array afterwards.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">If <paramref name="context"/> is <c>null</c>.</exception>
+    public Ed25519ctxSigner(byte[] context)
+    {
+        if (null == context)
+            throw new ArgumentNullException(nameof(context));
+
+        this.context = (byte[])context.Clone();
+    }
+
+    /// <inheritdoc/>
+    public virtual string AlgorithmName
+    {
+        get { return "Ed25519ctx"; }
+    }
+
+    /// <summary>Initialise for signing (private key) or verification (public key).</summary>
+    /// <exception cref="InvalidCastException">If <paramref name="parameters"/> is not an
+    /// <see cref="Ed25519PrivateKeyParameters"/> (signing) or
+    /// <see cref="Ed25519PublicKeyParameters"/> (verification).</exception>
+    public virtual void Init(bool forSigning, ICipherParameters parameters)
+    {
+        this.forSigning = forSigning;
+
+        if (forSigning)
+        {
+            this.privateKey = (Ed25519PrivateKeyParameters)parameters;
+            this.publicKey = null;
+        }
+        else
+        {
+            this.privateKey = null;
+            this.publicKey = (Ed25519PublicKeyParameters)parameters;
+        }
+
+        Reset();
+    }
+
+    /// <inheritdoc/>
+    public virtual void Update(byte b)
+    {
+        buffer.WriteByte(b);
+    }
+
+    /// <inheritdoc/>
+    public virtual void BlockUpdate(byte[] buf, int off, int len)
+    {
+        buffer.Write(buf, off, len);
+    }
+
+    /// <inheritdoc/>
+    public virtual void BlockUpdate(ReadOnlySpan<byte> input)
+    {
+        buffer.Write(input);
+    }
+
+    /// <summary>Length in bytes of an Ed25519ctx signature (64).</summary>
+    public virtual int GetMaxSignatureSize() => Ed25519.SignatureSize;
+
+    /// <summary>Finalise the buffered message and produce the signature. Buffer is reset on return.</summary>
+    /// <exception cref="InvalidOperationException">If the signer was initialised for verification,
+    /// not signing.</exception>
+    public virtual byte[] GenerateSignature()
+    {
+        if (!forSigning || null == privateKey)
+            throw new InvalidOperationException("Ed25519ctxSigner not initialised for signature generation.");
+
+        return buffer.GenerateSignature(privateKey, context);
+    }
+
+    /// <summary>
+    /// Finalise the buffered message and verify <paramref name="signature"/>. Buffer is reset on
+    /// return.
+    /// </summary>
+    /// <returns><c>true</c> if the signature is valid for the accumulated message, bound public
+    /// key and captured context; otherwise <c>false</c>.</returns>
+    /// <exception cref="InvalidOperationException">If the signer was initialised for signing, not
+    /// verification.</exception>
+    public virtual bool VerifySignature(byte[] signature)
+    {
+        if (forSigning || null == publicKey)
+            throw new InvalidOperationException("Ed25519ctxSigner not initialised for verification");
+
+        return buffer.VerifySignature(publicKey, context, signature);
+    }
+
+    /// <summary>Clear and rewind the buffered message; the captured context survives.</summary>
+    public virtual void Reset()
+    {
+        buffer.Reset();
+    }
+
+    private sealed class Buffer : MemoryStream
+    {
+        internal byte[] GenerateSignature(Ed25519PrivateKeyParameters privateKey, byte[] ctx)
+        {
+            lock (this)
+            {
+                byte[] buf = GetBuffer();
+                int count = Convert.ToInt32(Length);
+
+                byte[] signature = new byte[Ed25519PrivateKeyParameters.SignatureSize];
+                privateKey.Sign(Ed25519.Algorithm.Ed25519ctx, ctx, buf, 0, count, signature, 0);
+                Reset();
+                return signature;
+            }
+        }
+
+        internal bool VerifySignature(Ed25519PublicKeyParameters publicKey, byte[] ctx, byte[] signature)
+        {
+            if (Ed25519.SignatureSize != signature.Length)
+            {
+                Reset();
+                return false;
+            }
+
+            lock (this)
+            {
+                byte[] buf = GetBuffer();
+                int count = Convert.ToInt32(Length);
+
+                bool result = publicKey.Verify(Ed25519.Algorithm.Ed25519ctx, ctx, buf, 0, count, signature, 0);
+                Reset();
+                return result;
+            }
+        }
+
+        internal void Reset()
+        {
+            lock (this)
+            {
+                int count = Convert.ToInt32(Length);
+                Array.Clear(GetBuffer(), 0, count);
+                SetLength(0);
+            }
+        }
+    }
+}

@@ -1,0 +1,77 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Asn1.Cms;
+using CodeBrix.Cryptography.Asn1.Smime;
+using CodeBrix.Cryptography.Utilities;
+using CodeBrix.Cryptography.Utilities.Encoders;
+using CodeBrix.Cryptography.Utilities.Test;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Asn1.Tests; //was previously: Org.BouncyCastle.Asn1.Tests;
+
+public class SmimeTest
+	: ITest
+{
+	private static byte[] attrBytes = Base64.Decode("MDQGCSqGSIb3DQEJDzEnMCUwCgYIKoZIhvcNAwcwDgYIKoZIhvcNAwICAgCAMAcGBSsOAwIH");
+	private static byte[] prefBytes = Base64.Decode("MCwGCyqGSIb3DQEJEAILMR2hGwQIAAAAAAAAAAAYDzIwMDcwMzE1MTczNzI5Wg==");
+
+	public ITestResult Perform()
+	{
+		SmimeCapabilityVector caps = new SmimeCapabilityVector();
+
+		caps.AddCapability(SmimeCapability.DesEde3Cbc);
+		caps.AddCapability(SmimeCapability.RC2Cbc, 128);
+		caps.AddCapability(SmimeCapability.DesCbc);
+
+		SmimeCapabilitiesAttribute attr = new SmimeCapabilitiesAttribute(caps);
+
+		SmimeEncryptionKeyPreferenceAttribute pref = new SmimeEncryptionKeyPreferenceAttribute(
+			new RecipientKeyIdentifier(new DerOctetString(new byte[8]),
+			new DerGeneralizedTime("20070315173729Z"),
+			null));
+
+		try
+		{
+			if (!Arrays.AreEqual(attr.GetEncoded(), attrBytes))
+			{
+				return new SimpleTestResult(false, Name + ": Failed attr data check");
+			}
+
+			Asn1Object o = Asn1Object.FromByteArray(attrBytes);
+			if (!attr.Equals(o))
+			{
+				return new SimpleTestResult(false, Name + ": Failed equality test for attr");
+			}
+
+			if (!Arrays.AreEqual(pref.GetEncoded(), prefBytes))
+			{
+				return new SimpleTestResult(false, Name + ": Failed attr data check");
+			}
+
+			o = Asn1Object.FromByteArray(prefBytes);
+			if (!pref.Equals(o))
+			{
+				return new SimpleTestResult(false, Name + ": Failed equality test for pref");
+			}
+
+			return new SimpleTestResult(true, Name + ": Okay");
+		}
+		catch (Exception e)
+		{
+			return new SimpleTestResult(false, Name + ": Failed - exception " + e.ToString(), e);
+		}
+	}
+
+	public string Name
+	{
+		get { return "SMIME"; }
+	}
+
+	[Fact]
+	public void TestFunction()
+	{
+		string resultText = Perform().ToString();
+
+		Assert.Equal(Name + ": Okay", resultText);
+	}
+}

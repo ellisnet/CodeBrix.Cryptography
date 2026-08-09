@@ -1,0 +1,66 @@
+using System;
+
+namespace CodeBrix.Cryptography.Asn1.X509; //was previously: Org.BouncyCastle.Asn1.X509;
+
+public class PolicyInformation
+    : Asn1Encodable
+{
+    public static PolicyInformation GetInstance(object obj)
+    {
+        if (obj == null)
+            return null;
+        if (obj is PolicyInformation policyInformation)
+            return policyInformation;
+        return new PolicyInformation(Asn1Sequence.GetInstance(obj));
+    }
+
+    public static PolicyInformation GetInstance(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new PolicyInformation(Asn1Sequence.GetInstance(taggedObject, declaredExplicit));
+
+    public static PolicyInformation GetTagged(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new PolicyInformation(Asn1Sequence.GetTagged(taggedObject, declaredExplicit));
+
+    private readonly DerObjectIdentifier m_policyIdentifier;
+    private readonly Asn1Sequence m_policyQualifiers;
+
+    private PolicyInformation(Asn1Sequence seq)
+    {
+        int count = seq.Count, pos = 0;
+        if (count < 1 || count > 2)
+            throw new ArgumentException("Bad sequence size: " + count, nameof(seq));
+
+        m_policyIdentifier = Asn1Utilities.Read(seq, ref pos, DerObjectIdentifier.GetInstance);
+        m_policyQualifiers = Asn1Utilities.ReadOptional(seq, ref pos, Asn1Sequence.GetOptional);
+
+        if (pos != count)
+            throw new ArgumentException("Unexpected elements in sequence", nameof(seq));
+    }
+
+    public PolicyInformation(DerObjectIdentifier policyIdentifier)
+        : this(policyIdentifier, null)
+    {
+    }
+
+    public PolicyInformation(DerObjectIdentifier policyIdentifier, Asn1Sequence policyQualifiers)
+    {
+        m_policyIdentifier = policyIdentifier ?? throw new ArgumentNullException(nameof(policyIdentifier));
+        m_policyQualifiers = policyQualifiers;
+    }
+
+    public DerObjectIdentifier PolicyIdentifier => m_policyIdentifier;
+
+    public Asn1Sequence PolicyQualifiers => m_policyQualifiers;
+
+	/*
+     * PolicyInformation ::= Sequence {
+     *      policyIdentifier   CertPolicyId,
+     *      policyQualifiers   Sequence SIZE (1..MAX) OF
+     *              PolicyQualifierInfo OPTIONAL }
+     */
+    public override Asn1Object ToAsn1Object()
+    {
+        return m_policyQualifiers == null
+            ?  new DerSequence(m_policyIdentifier)
+            :  new DerSequence(m_policyIdentifier, m_policyQualifiers);
+    }
+}

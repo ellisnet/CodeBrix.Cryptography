@@ -1,0 +1,61 @@
+using System;
+
+namespace CodeBrix.Cryptography.Asn1.X500; //was previously: Org.BouncyCastle.Asn1.X500;
+
+/**
+ * Holding class for the AttributeTypeAndValue structures that make up an RDN.
+ */
+public class AttributeTypeAndValue
+    : Asn1Encodable
+{
+    public static AttributeTypeAndValue GetInstance(object obj)
+    {
+        if (obj == null)
+            return null;
+        if (obj is AttributeTypeAndValue attributeTypeAndValue)
+            return attributeTypeAndValue;
+        return new AttributeTypeAndValue(Asn1Sequence.GetInstance(obj));
+    }
+
+    public static AttributeTypeAndValue GetInstance(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new AttributeTypeAndValue(Asn1Sequence.GetInstance(taggedObject, declaredExplicit));
+
+    public static AttributeTypeAndValue GetTagged(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new AttributeTypeAndValue(Asn1Sequence.GetTagged(taggedObject, declaredExplicit));
+
+    private readonly DerObjectIdentifier m_type;
+    private readonly Asn1Encodable m_value;
+
+    private AttributeTypeAndValue(Asn1Sequence seq)
+    {
+        int count = seq.Count, pos = 0;
+        if (count != 2)
+            throw new ArgumentException("Bad sequence size: " + count, nameof(seq));
+
+        m_type = Asn1Utilities.Read(seq, ref pos, DerObjectIdentifier.GetInstance);
+        m_value = Asn1Utilities.Read(seq, ref pos, element => element);
+
+        if (pos != count)
+            throw new ArgumentException("Unexpected elements in sequence", nameof(seq));
+    }
+
+    public AttributeTypeAndValue(DerObjectIdentifier type, Asn1Encodable value)
+    {
+        m_type = type ?? throw new ArgumentNullException(nameof(type));
+        m_value = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public virtual DerObjectIdentifier Type => m_type;
+
+    public virtual Asn1Encodable Value => m_value;
+
+    /**
+     * <pre>
+     * AttributeTypeAndValue ::= SEQUENCE {
+     *           type         OBJECT IDENTIFIER,
+     *           value        ANY DEFINED BY type }
+     * </pre>
+     * @return a basic ASN.1 object representation.
+     */
+    public override Asn1Object ToAsn1Object() => new DerSequence(m_type, m_value);
+}

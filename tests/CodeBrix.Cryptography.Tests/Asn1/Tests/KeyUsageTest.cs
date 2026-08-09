@@ -1,0 +1,39 @@
+using System;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Utilities.Test;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Asn1.Tests; //was previously: Org.BouncyCastle.Asn1.Tests;
+
+public class KeyUsageTest
+	: SimpleTest
+{
+	public override string Name
+	{
+		get
+		{
+			return "KeyUsage";
+		}
+	}
+
+	public override void PerformTest()
+	{
+		BitStringConstantTester.testFlagValueCorrect(0, KeyUsage.DigitalSignature);
+		BitStringConstantTester.testFlagValueCorrect(1, KeyUsage.NonRepudiation);
+		BitStringConstantTester.testFlagValueCorrect(2, KeyUsage.KeyEncipherment);
+		BitStringConstantTester.testFlagValueCorrect(3, KeyUsage.DataEncipherment);
+		BitStringConstantTester.testFlagValueCorrect(4, KeyUsage.KeyAgreement);
+		BitStringConstantTester.testFlagValueCorrect(5, KeyUsage.KeyCertSign);
+		BitStringConstantTester.testFlagValueCorrect(6, KeyUsage.CrlSign);
+		BitStringConstantTester.testFlagValueCorrect(7, KeyUsage.EncipherOnly);
+		BitStringConstantTester.testFlagValueCorrect(8, KeyUsage.DecipherOnly);
+	}
+
+	[Fact]
+	public void TestFunction()
+	{
+		string resultText = Perform().ToString();
+
+		Assert.Equal(Name + ": Okay", resultText);
+	}
+}

@@ -1,0 +1,98 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Utilities.Encoders;
+using CodeBrix.Cryptography.Utilities.Test;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Crypto.Tests; //was previously: Org.BouncyCastle.Crypto.Tests;
+
+/**
+* a basic test that takes a cipher, key parameter, and an input
+* and output string. This test wraps the engine in a buffered block
+* cipher with padding disabled.
+*/
+public class BlockCipherVectorTest
+	: SimpleTest
+{
+	int                 id;
+	IBlockCipher         engine;
+	ICipherParameters    param;
+	byte[]              input;
+	byte[]              output;
+
+	public BlockCipherVectorTest(
+		int					id,
+		IBlockCipher		engine,
+		ICipherParameters	param,
+		string				input,
+		string				output)
+	{
+		this.id = id;
+		this.engine = engine;
+		this.param = param;
+		this.input = Hex.Decode(input);
+		this.output = Hex.Decode(output);
+	}
+
+	public override string Name
+	{
+		get
+		{
+			return engine.AlgorithmName + " Vector Test " + id;
+		}
+	}
+
+	public override void PerformTest()
+	{
+		BufferedBlockCipher cipher = new BufferedBlockCipher(engine);
+
+		cipher.Init(true, param);
+
+		byte[]  outBytes = new byte[input.Length];
+
+		int len1 = cipher.ProcessBytes(input, 0, input.Length, outBytes, 0);
+
+		cipher.DoFinal(outBytes, len1);
+
+		if (!AreEqual(outBytes, output))
+		{
+			Fail("failed - " + "expected " + Hex.ToHexString(output) + " got " + Hex.ToHexString(outBytes));
+		}
+
+		cipher.Init(false, param);
+
+		int len2 = cipher.ProcessBytes(output, 0, output.Length, outBytes, 0);
+
+		cipher.DoFinal(outBytes, len2);
+
+		if (!AreEqual(input, outBytes))
+		{
+			Fail("failed reversal got " + Hex.ToHexString(outBytes));
+		}
+
+        // NOTE: .NET Core 3.1 has Span<T>, but is tested against our .NET Standard 2.0 assembly.
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+		cipher.Init(true, param);
+
+		len1 = cipher.ProcessBytes(input, outBytes);
+
+		cipher.DoFinal(outBytes.AsSpan(len1));
+
+		if (!AreEqual(outBytes, output))
+		{
+			Fail("failed - " + "expected " + Hex.ToHexString(output) + " got " + Hex.ToHexString(outBytes));
+		}
+
+		cipher.Init(false, param);
+
+		len2 = cipher.ProcessBytes(output, outBytes);
+
+		cipher.DoFinal(outBytes.AsSpan(len2));
+
+		if (!AreEqual(input, outBytes))
+		{
+			Fail("failed reversal got " + Hex.ToHexString(outBytes));
+		}
+	}
+}

@@ -1,0 +1,557 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using CodeBrix.Cryptography.Asn1.Pkcs;
+using CodeBrix.Cryptography.Asn1.Sec;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Asn1.X9;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Security;
+using CodeBrix.Cryptography.Tls.Crypto;
+using CodeBrix.Cryptography.Tls.Crypto.Impl.BC;
+using CodeBrix.Cryptography.Utilities;
+using CodeBrix.Cryptography.Utilities.Encoders;
+using CodeBrix.Cryptography.Utilities.IO.Pem;
+using CodeBrix.Cryptography.Utilities.Test;
+using CodeBrix.Cryptography.X509;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Tls.Tests; //was previously: Org.BouncyCastle.Tls.Tests;
+
+public class TlsTestUtilities
+{
+    private static readonly ConcurrentDictionary<string, PemObject> PemObjectCache =
+        new ConcurrentDictionary<string, PemObject>();
+
+    internal static readonly byte[] RsaCertData = Base64.Decode(
+        "MIICUzCCAf2gAwIBAgIBATANBgkqhkiG9w0BAQQFADCBjzELMAkGA1UEBhMCQVUxKDAmBgNVBAoMH1RoZSBMZWdpb2" +
+        "4gb2YgdGhlIEJvdW5jeSBDYXN0bGUxEjAQBgNVBAcMCU1lbGJvdXJuZTERMA8GA1UECAwIVmljdG9yaWExLzAtBgkq" +
+        "hkiG9w0BCQEWIGZlZWRiYWNrLWNyeXB0b0Bib3VuY3ljYXN0bGUub3JnMB4XDTEzMDIyNTA2MDIwNVoXDTEzMDIyNT" +
+        "A2MDM0NVowgY8xCzAJBgNVBAYTAkFVMSgwJgYDVQQKDB9UaGUgTGVnaW9uIG9mIHRoZSBCb3VuY3kgQ2FzdGxlMRIw" +
+        "EAYDVQQHDAlNZWxib3VybmUxETAPBgNVBAgMCFZpY3RvcmlhMS8wLQYJKoZIhvcNAQkBFiBmZWVkYmFjay1jcnlwdG" +
+        "9AYm91bmN5Y2FzdGxlLm9yZzBaMA0GCSqGSIb3DQEBAQUAA0kAMEYCQQC0p+RhcFdPFqlwgrIr5YtqKmKXmEGb4Shy" +
+        "pL26Ymz66ZAPdqv7EhOdzl3lZWT6srZUMWWgQMYGiHQg4z2R7X7XAgERo0QwQjAOBgNVHQ8BAf8EBAMCBSAwEgYDVR" +
+        "0lAQH/BAgwBgYEVR0lADAcBgNVHREBAf8EEjAQgQ50ZXN0QHRlc3QudGVzdDANBgkqhkiG9w0BAQQFAANBAHU55Ncz" +
+        "eglREcTg54YLUlGWu2WOYWhit/iM1eeq8Kivro7q98eW52jTuMI3CI5ulqd0hYzshQKQaZ5GDzErMyM=");
+
+    internal static readonly byte[] DudRsaCertData = Base64.Decode(
+        "MIICUzCCAf2gAwIBAgIBATANBgkqhkiG9w0BAQQFADCBjzELMAkGA1UEBhMCQVUxKDAmBgNVBAoMH1RoZSBMZWdpb2" +
+        "4gb2YgdGhlIEJvdW5jeSBDYXN0bGUxEjAQBgNVBAcMCU1lbGJvdXJuZTERMA8GA1UECAwIVmljdG9yaWExLzAtBgkq" +
+        "hkiG9w0BCQEWIGZlZWRiYWNrLWNyeXB0b0Bib3VuY3ljYXN0bGUub3JnMB4XDTEzMDIyNTA1NDcyOFoXDTEzMDIyNT" +
+        "A1NDkwOFowgY8xCzAJBgNVBAYTAkFVMSgwJgYDVQQKDB9UaGUgTGVnaW9uIG9mIHRoZSBCb3VuY3kgQ2FzdGxlMRIw" +
+        "EAYDVQQHDAlNZWxib3VybmUxETAPBgNVBAgMCFZpY3RvcmlhMS8wLQYJKoZIhvcNAQkBFiBmZWVkYmFjay1jcnlwdG" +
+        "9AYm91bmN5Y2FzdGxlLm9yZzBaMA0GCSqGSIb3DQEBAQUAA0kAMEYCQQC0p+RhcFdPFqlwgrIr5YtqKmKXmEGb4Shy" +
+        "pL26Ymz66ZAPdqv7EhOdzl3lZWT6srZUMWWgQMYGiHQg4z2R7X7XAgERo0QwQjAOBgNVHQ8BAf8EBAMCAAEwEgYDVR" +
+        "0lAQH/BAgwBgYEVR0lADAcBgNVHREBAf8EEjAQgQ50ZXN0QHRlc3QudGVzdDANBgkqhkiG9w0BAQQFAANBAJg55PBS" +
+        "weg6obRUKF4FF6fCrWFi6oCYSQ99LWcAeupc5BofW5MstFMhCOaEucuGVqunwT5G7/DweazzCIrSzB0=");
+
+    internal static TlsPskIdentity CreateDefaultPskIdentity(bool badKey) =>
+        new BasicTlsPskIdentity("client", GetPskPasswordUtf8(badKey));
+
+    internal static bool EqualsIgnoreCase(string a, string b) =>
+        string.Equals(a, b, StringComparison.InvariantCultureIgnoreCase);
+
+    internal static string Fingerprint(X509CertificateStructure c)
+    {
+        byte[] der = c.GetEncoded();
+        byte[] hash = Sha256DigestOf(der);
+        byte[] hexBytes = Hex.Encode(hash);
+        string hex = Encoding.ASCII.GetString(hexBytes).ToUpperInvariant();
+
+        StringBuilder fp = new StringBuilder();
+        int i = 0;
+        fp.Append(hex.Substring(i, 2));
+        while ((i += 2) < hex.Length)
+        {
+            fp.Append(':');
+            fp.Append(hex.Substring(i, 2));
+        }
+        return fp.ToString();
+    }
+
+    internal static byte[] Sha256DigestOf(byte[] input)
+    {
+        return DigestUtilities.CalculateDigest("SHA256", input);
+    }
+
+    internal static string GetCACertResource(short signatureAlgorithm)
+    {
+        return "x509-ca-" + GetResourceName12(signatureAlgorithm, forServer: false) + ".pem";
+    }
+
+    internal static string GetCACertResource(string eeCertResource)
+    {
+        if (eeCertResource.StartsWith("x509-client-"))
+        {
+            eeCertResource = eeCertResource.Substring("x509-client-".Length);
+        }
+        if (eeCertResource.StartsWith("x509-server-"))
+        {
+            eeCertResource = eeCertResource.Substring("x509-server-".Length);
+        }
+        if (eeCertResource.EndsWith(".pem"))
+        {
+            eeCertResource = eeCertResource.Substring(0, eeCertResource.Length - ".pem".Length);
+        }
+
+        if (EqualsIgnoreCase("dsa", eeCertResource))
+            return GetCACertResource(SignatureAlgorithm.dsa);
+
+        if (EqualsIgnoreCase("ecdh", eeCertResource) ||
+            EqualsIgnoreCase("ecdsa", eeCertResource))
+        {
+            return GetCACertResource(SignatureAlgorithm.ecdsa);
+        }
+
+        if (EqualsIgnoreCase("ed25519", eeCertResource))
+            return GetCACertResource13(SignatureScheme.ed25519);
+        if (EqualsIgnoreCase("ed448", eeCertResource))
+            return GetCACertResource13(SignatureScheme.ed448);
+
+        if (eeCertResource.StartsWith("ml_dsa_"))
+        {
+            if (EqualsIgnoreCase("ml_dsa_44", eeCertResource))
+                return GetCACertResource13(SignatureScheme.mldsa44);
+            if (EqualsIgnoreCase("ml_dsa_65", eeCertResource))
+                return GetCACertResource13(SignatureScheme.mldsa65);
+            if (EqualsIgnoreCase("ml_dsa_87", eeCertResource))
+                return GetCACertResource13(SignatureScheme.mldsa87);
+        }
+
+        if (eeCertResource.StartsWith("slh_dsa_sha2_"))
+        {
+            if (EqualsIgnoreCase("slh_dsa_sha2_128s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_128s);
+            if (EqualsIgnoreCase("slh_dsa_sha2_128f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_128f);
+            if (EqualsIgnoreCase("slh_dsa_sha2_192s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_192s);
+            if (EqualsIgnoreCase("slh_dsa_sha2_192f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_192f);
+            if (EqualsIgnoreCase("slh_dsa_sha2_256s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_256s);
+            if (EqualsIgnoreCase("slh_dsa_sha2_256f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_sha2_256f);
+        }
+        if (eeCertResource.StartsWith("slh_dsa_shake_"))
+        {
+            if (EqualsIgnoreCase("slh_dsa_shake_128s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_128s);
+            if (EqualsIgnoreCase("slh_dsa_shake_128f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_128f);
+            if (EqualsIgnoreCase("slh_dsa_shake_192s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_192s);
+            if (EqualsIgnoreCase("slh_dsa_shake_192f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_192f);
+            if (EqualsIgnoreCase("slh_dsa_shake_256s", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_256s);
+            if (EqualsIgnoreCase("slh_dsa_shake_256f", eeCertResource))
+                return GetCACertResource13(SignatureScheme.DRAFT_slhdsa_shake_256f);
+        }
+
+        // Each of these families is self-contained: the end-entity certificate is issued
+        // by a CA on the same curve, so the CA resource simply shares the name.
+        if (EqualsIgnoreCase("brainpoolP256r1", eeCertResource) ||
+            EqualsIgnoreCase("brainpoolP384r1", eeCertResource) ||
+            EqualsIgnoreCase("brainpoolP512r1", eeCertResource) ||
+            EqualsIgnoreCase("secp384r1", eeCertResource) ||
+            EqualsIgnoreCase("secp521r1", eeCertResource) ||
+            EqualsIgnoreCase("sm2", eeCertResource))
+        {
+            return "x509-ca-" + eeCertResource + ".pem";
+        }
+
+        if (EqualsIgnoreCase("rsa", eeCertResource) ||
+            EqualsIgnoreCase("rsa-enc", eeCertResource) ||
+            EqualsIgnoreCase("rsa-sign", eeCertResource))
+        {
+            return GetCACertResource(SignatureAlgorithm.rsa);
+        }
+
+        if (EqualsIgnoreCase("rsa_pss_256", eeCertResource))
+            return GetCACertResource(SignatureAlgorithm.rsa_pss_pss_sha256);
+        if (EqualsIgnoreCase("rsa_pss_384", eeCertResource))
+            return GetCACertResource(SignatureAlgorithm.rsa_pss_pss_sha384);
+        if (EqualsIgnoreCase("rsa_pss_512", eeCertResource))
+            return GetCACertResource(SignatureAlgorithm.rsa_pss_pss_sha512);
+
+        throw new TlsFatalAlert(AlertDescription.internal_error);
+    }
+
+    internal static string GetCACertResource13(int signatureScheme)
+    {
+        return "x509-ca-" + GetResourceName13(signatureScheme, forServer: false) + ".pem";
+    }
+
+    internal static string GetPskPassword(bool badKey) => badKey ? "TLS_TEST_PSK_BAD" : "TLS_TEST_PSK";
+
+    internal static byte[] GetPskPasswordUtf8(bool badKey) => Strings.ToUtf8ByteArray(GetPskPassword(badKey));
+
+    internal static string GetResourceName12(short signatureAlgorithm, bool forServer) =>
+        FindResourceName12(signatureAlgorithm, forServer) ?? throw new TlsFatalAlert(AlertDescription.internal_error);
+
+    internal static string GetResourceName13(int signatureScheme, bool forServer) =>
+        FindResourceName13(signatureScheme, forServer) ?? throw new TlsFatalAlert(AlertDescription.internal_error);
+
+    internal static string FindResourceName12(short signatureAlgorithm, bool forServer)
+    {
+        switch (signatureAlgorithm)
+        {
+        case SignatureAlgorithm.dsa:
+            return "dsa";
+        case SignatureAlgorithm.ecdsa:
+            return "ecdsa";
+        case SignatureAlgorithm.ed25519:
+            return "ed25519";
+        case SignatureAlgorithm.ed448:
+            return "ed448";
+        case SignatureAlgorithm.rsa_pss_pss_sha256:
+            return "rsa_pss_256";
+        case SignatureAlgorithm.rsa_pss_pss_sha384:
+            return "rsa_pss_384";
+        case SignatureAlgorithm.rsa_pss_pss_sha512:
+            return "rsa_pss_512";
+        case SignatureAlgorithm.rsa:
+        case SignatureAlgorithm.rsa_pss_rsae_sha256:
+        case SignatureAlgorithm.rsa_pss_rsae_sha384:
+        case SignatureAlgorithm.rsa_pss_rsae_sha512:
+            return forServer ? "rsa-sign" : "rsa";
+
+        // TODO[RFC 9189] Choose names here and apply reverse mappings in GetCACertResource(String)
+        case SignatureAlgorithm.gostr34102012_256:
+        case SignatureAlgorithm.gostr34102012_512:
+
+        default:
+            return null;
+        }
+    }
+
+    internal static string FindResourceName13(int signatureScheme, bool forServer)
+    {
+        // TODO[tls-slhdsa] Move into switch statement once constants available
+        if (SignatureScheme.IsSlhDsa(signatureScheme))
+        {
+            return SignatureScheme.DRAFT_slhdsa_sha2_128s == signatureScheme ? "slh_dsa_sha2_128s"
+                :  SignatureScheme.DRAFT_slhdsa_sha2_128f == signatureScheme ? "slh_dsa_sha2_128f"
+                :  SignatureScheme.DRAFT_slhdsa_sha2_192s == signatureScheme ? "slh_dsa_sha2_192s"
+                :  SignatureScheme.DRAFT_slhdsa_sha2_192f == signatureScheme ? "slh_dsa_sha2_192f"
+                :  SignatureScheme.DRAFT_slhdsa_sha2_256s == signatureScheme ? "slh_dsa_sha2_256s"
+                :  SignatureScheme.DRAFT_slhdsa_sha2_256f == signatureScheme ? "slh_dsa_sha2_256f"
+                :  SignatureScheme.DRAFT_slhdsa_shake_128s == signatureScheme ? "slh_dsa_shake_128s"
+                :  SignatureScheme.DRAFT_slhdsa_shake_128f == signatureScheme ? "slh_dsa_shake_128f"
+                :  SignatureScheme.DRAFT_slhdsa_shake_192s == signatureScheme ? "slh_dsa_shake_192s"
+                :  SignatureScheme.DRAFT_slhdsa_shake_192f == signatureScheme ? "slh_dsa_shake_192f"
+                :  SignatureScheme.DRAFT_slhdsa_shake_256s == signatureScheme ? "slh_dsa_shake_256s"
+                :  SignatureScheme.DRAFT_slhdsa_shake_256f == signatureScheme ? "slh_dsa_shake_256f"
+                :  throw new InvalidOperationException();
+        }
+
+        switch (signatureScheme)
+        {
+        case SignatureScheme.ecdsa_secp256r1_sha256:
+            return "ecdsa";
+        case SignatureScheme.ed25519:
+            return "ed25519";
+        case SignatureScheme.ed448:
+            return "ed448";
+        case SignatureScheme.rsa_pss_pss_sha256:
+            return "rsa_pss_256";
+        case SignatureScheme.rsa_pss_pss_sha384:
+            return "rsa_pss_384";
+        case SignatureScheme.rsa_pss_pss_sha512:
+            return "rsa_pss_512";
+        case SignatureScheme.rsa_pss_rsae_sha256:
+        case SignatureScheme.rsa_pss_rsae_sha384:
+        case SignatureScheme.rsa_pss_rsae_sha512:
+            return forServer ? "rsa-sign" : "rsa";
+        case SignatureScheme.mldsa44:
+            return "ml_dsa_44";
+        case SignatureScheme.mldsa65:
+            return "ml_dsa_65";
+        case SignatureScheme.mldsa87:
+            return "ml_dsa_87";
+
+        // Upstream returns null here and marks these "TODO: Add test resources for
+        // these" / "TODO[RFC 8998]", which meant TestSignatures13 silently skipped six
+        // signature schemes. This fork generates the credentials (see
+        // TestDataGeneration/TlsCredentialGenerator) and maps them, so those paths are
+        // exercised. This is a deliberate divergence from the upstream test utility.
+        case SignatureScheme.ecdsa_brainpoolP256r1tls13_sha256:
+            return "brainpoolP256r1";
+        case SignatureScheme.ecdsa_brainpoolP384r1tls13_sha384:
+            return "brainpoolP384r1";
+        case SignatureScheme.ecdsa_brainpoolP512r1tls13_sha512:
+            return "brainpoolP512r1";
+        case SignatureScheme.ecdsa_secp384r1_sha384:
+            return "secp384r1";
+        case SignatureScheme.ecdsa_secp521r1_sha512:
+            return "secp521r1";
+        case SignatureScheme.sm2sig_sm3:
+            return "sm2";
+
+        default:
+            return null;
+        }
+    }
+
+    internal static TlsCredentialedAgreement LoadAgreementCredentials(TlsContext context, string[] certResources,
+        string keyResource)
+    {
+        TlsCrypto crypto = context.Crypto;
+        Certificate certificate = LoadCertificateChain(context, certResources);
+
+        // TODO[tls-ops] Need to have TlsCrypto construct the credentials from the certs/key (as raw data)
+        if (crypto is BcTlsCrypto)
+        {
+            AsymmetricKeyParameter privateKey = LoadBcPrivateKeyResource(keyResource);
+
+            return new BcDefaultTlsCredentialedAgreement((BcTlsCrypto)crypto, certificate, privateKey);
+        }
+        else
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    internal static TlsCredentialedDecryptor LoadEncryptionCredentials(TlsContext context, string[] certResources,
+        string keyResource)
+    {
+        TlsCrypto crypto = context.Crypto;
+        Certificate certificate = LoadCertificateChain(context, certResources);
+
+        // TODO[tls-ops] Need to have TlsCrypto construct the credentials from the certs/key (as raw data)
+        if (crypto is BcTlsCrypto)
+        {
+            AsymmetricKeyParameter privateKey = LoadBcPrivateKeyResource(keyResource);
+
+            return new BcDefaultTlsCredentialedDecryptor((BcTlsCrypto)crypto, certificate, privateKey);
+        }
+        else
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    public static TlsCredentialedSigner LoadSignerCredentials(TlsCryptoParameters cryptoParams, TlsCrypto crypto,
+        string[] certResources, string keyResource, SignatureAndHashAlgorithm signatureAndHashAlgorithm)
+    {
+        Certificate certificate = LoadCertificateChain(cryptoParams.ServerVersion, crypto, certResources);
+
+        // TODO[tls-ops] Need to have TlsCrypto construct the credentials from the certs/key (as raw data)
+        if (crypto is BcTlsCrypto)
+        {
+            AsymmetricKeyParameter privateKey = LoadBcPrivateKeyResource(keyResource);
+
+            return new BcDefaultTlsCredentialedSigner(cryptoParams, (BcTlsCrypto)crypto, privateKey, certificate, signatureAndHashAlgorithm);
+        }
+        else
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    internal static TlsCredentialedSigner LoadSignerCredentials(TlsContext context, string[] certResources,
+        string keyResource, SignatureAndHashAlgorithm signatureAndHashAlgorithm)
+    {
+        TlsCrypto crypto = context.Crypto;
+        TlsCryptoParameters cryptoParams = new TlsCryptoParameters(context);
+
+        return LoadSignerCredentials(cryptoParams, crypto, certResources, keyResource, signatureAndHashAlgorithm);
+    }
+
+    internal static TlsCredentialedSigner LoadSignerCredentials(TlsContext context,
+        IList<SignatureAndHashAlgorithm> supportedSignatureAlgorithms, short signatureAlgorithm,
+        string certResource, string keyResource)
+    {
+        if (supportedSignatureAlgorithms == null)
+        {
+            supportedSignatureAlgorithms = TlsUtilities.GetDefaultSignatureAlgorithms(signatureAlgorithm);
+        }
+
+        SignatureAndHashAlgorithm signatureAndHashAlgorithm = null;
+
+        foreach (SignatureAndHashAlgorithm alg in supportedSignatureAlgorithms)
+        {
+            if (alg.Signature == signatureAlgorithm)
+            {
+                // Just grab the first one we find
+                signatureAndHashAlgorithm = alg;
+                break;
+            }
+        }
+
+        if (signatureAndHashAlgorithm == null)
+            return null;
+
+        return LoadSignerCredentials(context, new string[]{ certResource }, keyResource,
+            signatureAndHashAlgorithm);
+    }
+
+    internal static TlsCredentialedSigner LoadSignerCredentialsServer(TlsContext context,
+        IList<SignatureAndHashAlgorithm> supportedSignatureAlgorithms, short signatureAlgorithm)
+    {
+        string sigName = GetResourceName12(signatureAlgorithm, forServer: true);
+
+        string certResource = "x509-server-" + sigName + ".pem";
+        string keyResource = "x509-server-key-" + sigName + ".pem";
+
+        return LoadSignerCredentials(context, supportedSignatureAlgorithms, signatureAlgorithm, certResource,
+            keyResource);
+    }
+
+    /// <summary>
+    /// Build a fresh Ed25519 raw public key (RFC 7250) signer credential for the connection's crypto backend.
+    /// </summary>
+    /// <exception cref="IOException"/>
+    internal static TlsCredentialedSigner CreateRawKeyEd25519Credentials(TlsContext context)
+    {
+        TlsCrypto crypto = context.Crypto;
+        byte[] certificateRequestContext = TlsUtilities.IsTlsV13(context) ? TlsUtilities.EmptyBytes : null;
+
+        if (crypto is BcTlsCrypto bcCrypto)
+        {
+            Ed25519PrivateKeyParameters privateKey = new Ed25519PrivateKeyParameters(bcCrypto.SecureRandom);
+            TlsCertificate rawKeyCert = new BcTlsRawKeyCertificate(bcCrypto,
+                SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(privateKey.GeneratePublicKey()));
+            Certificate certificate = new Certificate(CertificateType.RawPublicKey, certificateRequestContext,
+                new CertificateEntry[]{ new CertificateEntry(rawKeyCert, null) });
+
+            return new BcDefaultTlsCredentialedSigner(new TlsCryptoParameters(context), bcCrypto, privateKey,
+                certificate, SignatureAndHashAlgorithm.ed25519);
+        }
+        else
+        {
+            // bc-java supports also JcaTlsCrypto here
+            throw new InvalidOperationException();
+        }
+    }
+
+    internal static Certificate LoadCertificateChain(ProtocolVersion protocolVersion, TlsCrypto crypto,
+        string[] resources)
+    {
+        if (TlsUtilities.IsTlsV13(protocolVersion))
+        {
+            CertificateEntry[] certificateEntryList = new CertificateEntry[resources.Length];
+            for (int i = 0; i < resources.Length; ++i)
+            {
+                TlsCertificate certificate = LoadCertificateResource(crypto, resources[i]);
+
+                // TODO[tls13] Add possibility of specifying e.g. CertificateStatus
+                IDictionary<int, byte[]> extensions = null;
+
+                certificateEntryList[i] = new CertificateEntry(certificate, extensions);
+            }
+
+            // TODO[tls13] Support for non-empty request context
+            byte[] certificateRequestContext = TlsUtilities.EmptyBytes;
+
+            return new Certificate(certificateRequestContext, certificateEntryList);
+        }
+        else
+        {
+            TlsCertificate[] chain = new TlsCertificate[resources.Length];
+            for (int i = 0; i < resources.Length; ++i)
+            {
+                chain[i] = LoadCertificateResource(crypto, resources[i]);
+            }
+            return new Certificate(chain);
+        }
+    }
+
+    internal static Certificate LoadCertificateChain(TlsContext context, string[] resources)
+    {
+        return LoadCertificateChain(context.ServerVersion, context.Crypto, resources);
+    }
+
+    internal static X509CertificateStructure LoadBcCertificateResource(string resource)
+    {
+        PemObject pem = LoadPemResource(resource);
+        if (pem.Type.EndsWith("CERTIFICATE"))
+        {
+            return X509CertificateStructure.GetInstance(pem.Content);
+        }
+        throw new ArgumentException("doesn't specify a valid certificate", "resource");
+    }
+
+    internal static TlsCertificate LoadCertificateResource(TlsCrypto crypto, string resource)
+    {
+        PemObject pem = LoadPemResource(resource);
+        if (pem.Type.EndsWith("CERTIFICATE"))
+        {
+            return crypto.CreateCertificate(pem.Content);
+        }
+        throw new ArgumentException("doesn't specify a valid certificate", "resource");
+    }
+
+    internal static AsymmetricKeyParameter LoadBcPrivateKeyResource(string resource)
+    {
+        PemObject pem = LoadPemResource(resource);
+        if (pem.Type.Equals("PRIVATE KEY"))
+        {
+            return PrivateKeyFactory.CreateKey(pem.Content);
+        }
+        if (pem.Type.Equals("ENCRYPTED PRIVATE KEY"))
+        {
+            throw new NotSupportedException("Encrypted PKCS#8 keys not supported");
+        }
+        if (pem.Type.Equals("RSA PRIVATE KEY"))
+        {
+            RsaPrivateKeyStructure rsa = RsaPrivateKeyStructure.GetInstance(pem.Content);
+            return new RsaPrivateCrtKeyParameters(rsa.Modulus, rsa.PublicExponent,
+                rsa.PrivateExponent, rsa.Prime1, rsa.Prime2, rsa.Exponent1,
+                rsa.Exponent2, rsa.Coefficient);
+        }
+        if (pem.Type.Equals("EC PRIVATE KEY"))
+        {
+            ECPrivateKeyStructure pKey = ECPrivateKeyStructure.GetInstance(pem.Content);
+            AlgorithmIdentifier algId = new AlgorithmIdentifier(X9ObjectIdentifiers.IdECPublicKey, pKey.Parameters);
+            PrivateKeyInfo privInfo = new PrivateKeyInfo(algId, pKey);
+            return PrivateKeyFactory.CreateKey(privInfo);
+        }
+        throw new ArgumentException("doesn't specify a valid private key", "resource");
+    }
+
+    internal static PemObject LoadPemResource(string resource)
+    {
+        return PemObjectCache.GetOrAdd(resource, key =>
+        {
+            using (var p = new PemReader(new StreamReader(SimpleTest.FindTestResource("tls", "credentials", key))))
+            {
+                return p.ReadPemObject();
+            }
+        });
+    }
+
+    internal static bool AreSameCertificate(TlsCrypto crypto, TlsCertificate cert, string resource)
+    {
+        // TODO Cache test resources?
+        return AreSameCertificate(cert, LoadCertificateResource(crypto, resource));
+    }
+
+    internal static bool AreSameCertificate(TlsCertificate a, TlsCertificate b)
+    {
+        // TODO[tls-ops] Support equals on TlsCertificate?
+        return Arrays.AreEqual(a.GetEncoded(), b.GetEncoded());
+    }
+
+    internal static TlsCertificate[] GetTrustedCertPath(TlsCrypto crypto, TlsCertificate cert, string[] resources)
+    {
+        foreach (string eeCertResource in resources)
+        {
+            TlsCertificate eeCert = LoadCertificateResource(crypto, eeCertResource);
+            if (AreSameCertificate(cert, eeCert))
+            {
+                string caCertResource = GetCACertResource(eeCertResource);
+                TlsCertificate caCert = LoadCertificateResource(crypto, caCertResource);
+                if (null != caCert)
+                {
+                    return new TlsCertificate[]{ eeCert, caCert };
+                }
+            }
+        }
+        return null;
+    }
+}

@@ -1,0 +1,98 @@
+using System;
+using System.IO;
+using System.Text;
+using CodeBrix.Cryptography.Utilities.Date;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Tls.Tests; //was previously: Org.BouncyCastle.Tls.Tests;
+
+public class LoggingDatagramTransport
+    : DatagramTransport
+{
+    private static readonly bool EnableDumps = false;
+
+    private static readonly string HEX_CHARS = "0123456789ABCDEF";
+
+    private readonly DatagramTransport m_transport;
+    private readonly TextWriter m_output;
+    private readonly long m_launchTimestamp;
+
+    public LoggingDatagramTransport(DatagramTransport transport, TextWriter output)
+    {
+        this.m_transport = transport;
+        this.m_output = output;
+        this.m_launchTimestamp = DateTimeUtilities.CurrentUnixMs();
+    }
+
+    public virtual int GetReceiveLimit() => m_transport.GetReceiveLimit();
+
+    public virtual int GetSendLimit() => m_transport.GetSendLimit();
+
+    public virtual int Receive(byte[] buf, int off, int len, int waitMillis)
+    {
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+        return Receive(buf.AsSpan(off, len), waitMillis);
+    }
+
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+    public virtual int Receive(Span<byte> buffer, int waitMillis)
+    {
+        int length = m_transport.Receive(buffer, waitMillis);
+        if (length >= 0)
+        {
+            DumpDatagram("Received", buffer[..length]);
+        }
+        return length;
+    }
+
+    public virtual void Send(byte[] buf, int off, int len)
+    {
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+        Send(buf.AsSpan(off, len));
+    }
+
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+    public virtual void Send(ReadOnlySpan<byte> buffer)
+    {
+        DumpDatagram("Sending", buffer);
+        m_transport.Send(buffer);
+    }
+
+    public virtual void Close() => m_transport.Close();
+
+//#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+    private void DumpDatagram(string verb, ReadOnlySpan<byte> buffer)
+    {
+        if (!EnableDumps)
+            return;
+
+        int len = buffer.Length;
+        long timestamp = DateTimeUtilities.CurrentUnixMs() - m_launchTimestamp;
+        StringBuilder sb = new StringBuilder("(+" + timestamp + "ms) " + verb + " " + len + " byte datagram:");
+        for (int pos = 0; pos < len; ++pos)
+        {
+            if (pos % 16 == 0)
+            {
+                sb.AppendLine();
+                sb.Append("    ");
+            }
+            else if (pos % 16 == 8)
+            {
+                sb.Append('-');
+            }
+            else
+            {
+                sb.Append(' ');
+            }
+            int val = buffer[pos] & 0xFF;
+            sb.Append(HEX_CHARS[val >> 4]);
+            sb.Append(HEX_CHARS[val & 0xF]);
+        }
+        Dump(sb.ToString());
+    }
+
+    private void Dump(string s)
+    {
+        lock (this) m_output.WriteLine(s);
+    }
+}

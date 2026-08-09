@@ -1,0 +1,64 @@
+using System;
+using System.Collections.Generic;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Tls.Tests; //was previously: Org.BouncyCastle.Tls.Tests;
+
+public class TlsUtilitiesTest
+{
+    [Fact]
+    public void TestChooseSignatureAndHash()
+    {
+        int keyExchangeAlgorithm = KeyExchangeAlgorithm.ECDHE_RSA;
+        short signatureAlgorithm = TlsUtilities.GetLegacySignatureAlgorithmServer(keyExchangeAlgorithm);
+
+        var supportedSignatureAlgorithms = GetSignatureAlgorithms(false);
+        SignatureAndHashAlgorithm sigAlg = TlsUtilities.ChooseSignatureAndHashAlgorithm(ProtocolVersion.TLSv12,
+            supportedSignatureAlgorithms, signatureAlgorithm);
+        Assert.Equal(HashAlgorithm.sha256, sigAlg.Hash);
+
+        for (int count = 0; count < 10; ++count)
+        {
+            supportedSignatureAlgorithms = GetSignatureAlgorithms(true);
+            sigAlg = TlsUtilities.ChooseSignatureAndHashAlgorithm(ProtocolVersion.TLSv12,
+                supportedSignatureAlgorithms, signatureAlgorithm);
+            Assert.Equal(HashAlgorithm.sha256, sigAlg.Hash);
+        }
+    }
+
+    private static IList<SignatureAndHashAlgorithm> GetSignatureAlgorithms(bool randomise)
+    {
+        short[] hashAlgorithms = new short[]{ HashAlgorithm.sha1, HashAlgorithm.sha224, HashAlgorithm.sha256,
+            HashAlgorithm.sha384, HashAlgorithm.sha512, HashAlgorithm.md5 };
+        short[] signatureAlgorithms = new short[]{ SignatureAlgorithm.rsa, SignatureAlgorithm.dsa,
+            SignatureAlgorithm.ecdsa };
+
+        var result = new List<SignatureAndHashAlgorithm>();
+        for (int i = 0; i < signatureAlgorithms.Length; ++i)
+        {
+            for (int j = 0; j < hashAlgorithms.Length; ++j)
+            {
+                result.Add(SignatureAndHashAlgorithm.GetInstance(hashAlgorithms[j], signatureAlgorithms[i]));
+            }
+        }
+
+        if (randomise)
+        {
+            Random r = new Random();
+            int count = result.Count;
+            for (int src = 0; src < count; ++src)
+            {
+                int dst = r.Next(count);
+                if (src != dst)
+                {
+                    var a = result[src];
+                    var b = result[dst];
+                    result[dst] = a;
+                    result[src] = b;
+                }
+            }
+        }
+
+        return result;
+    }
+}

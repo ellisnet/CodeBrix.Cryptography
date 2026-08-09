@@ -1,0 +1,40 @@
+using CodeBrix.Cryptography.Crypto.Digests;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Crypto.Tests; //was previously: Org.BouncyCastle.Crypto.Tests;
+
+/// <remarks>Standard vector test for SHA-1 from "Handbook of Applied Cryptography", page 345.</remarks>
+public class Sha1DigestTest
+    : DigestTest
+{
+    private static readonly string[] Messages =
+    {
+        "",
+        "a",
+        "abc",
+        "abcdefghijklmnopqrstuvwxyz",
+    };
+
+    private static readonly string[] Digests =
+    {
+        "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+        "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8",
+        "a9993e364706816aba3e25717850c26c9cd0d89d",
+        "32d10c7b8cf96570ca04ce37f2a19d84240d3a89",
+    };
+
+    public Sha1DigestTest()
+        : base(new Sha1Digest(), Messages, Digests)
+    {
+    }
+
+    protected override IDigest CloneDigest(IDigest digest) => new Sha1Digest((Sha1Digest)digest);
+
+    [Fact]
+    public void TestFunction()
+    {
+        string resultText = Perform().ToString();
+
+        Assert.Equal(Name + ": Okay", resultText);
+    }
+}

@@ -1,0 +1,202 @@
+using System.IO;
+using CodeBrix.Cryptography.Asn1;
+using CodeBrix.Cryptography.Asn1.Cms;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Utilities;
+
+namespace CodeBrix.Cryptography.Cms; //was previously: Org.BouncyCastle.Cms;
+
+/**
+ * Parsing class for an CMS Authenticated Data object from an input stream.
+ * <p>
+ * Note: that because we are in a streaming mode only one recipient can be tried and it is important
+ * that the methods on the parser are called in the appropriate order.
+ * </p>
+ * <p>
+ * Example of use - assuming the first recipient matches the private key we have.
+ * <pre>
+ *      CMSAuthenticatedDataParser     ad = new CMSAuthenticatedDataParser(inputStream);
+ *
+ *      RecipientInformationStore  recipients = ad.getRecipientInfos();
+ *
+ *      Collection  c = recipients.getRecipients();
+ *      Iterator    it = c.iterator();
+ *
+ *      if (it.hasNext())
+ *      {
+ *          RecipientInformation   recipient = (RecipientInformation)it.next();
+ *
+ *          CMSTypedStream recData = recipient.getContentStream(privateKey, "BC");
+ *
+ *          processDataStream(recData.getContentStream());
+ *
+ *          if (!Arrays.equals(ad.getMac(), recipient.getMac())
+ *          {
+ *              System.err.println("Data corrupted!!!!");
+ *          }
+ *      }
+ *  </pre>
+ *  Note: this class does not introduce buffering - if you are processing large files you should create
+ *  the parser with:
+ *  <pre>
+ *          CMSAuthenticatedDataParser     ep = new CMSAuthenticatedDataParser(new BufferedInputStream(inputStream, bufSize));
+ *  </pre>
+ *  where bufSize is a suitably large buffer size.
+ * </p>
+ * <p>
+ * <b>Stream handling note:</b>
+ * <ul>
+ *   <li>The constructor reads only enough of the supplied Stream to expose the
+ *       CMS structure metadata (originator info, recipient infos, MAC algorithm).
+ *       The encapsulated content is drained lazily by the caller via
+ *       {@link RecipientInformation#GetContentStream}; the MAC is available from
+ *       {@link #GetMac()} once the content stream has been read to EOF.</li>
+ *   <li>The supplied Stream is <b>not closed automatically</b>. Call
+ *       {@link #Close()} on this parser (inherited from
+ *       {@link CmsContentInfoParser}) to close the underlying Stream, or close
+ *       it yourself.</li>
+ * </ul>
+ * </p>
+ */
+public class CmsAuthenticatedDataParser
+    : CmsContentInfoParser
+{
+    internal RecipientInformationStore _recipientInfoStore;
+    internal AuthenticatedDataParser authData;
+
+    private AlgorithmIdentifier macAlg;
+    private byte[] mac;
+    private Asn1.Cms.AttributeTable authAttrs;
+    private Asn1.Cms.AttributeTable unauthAttrs;
+
+    private bool authAttrNotRead;
+    private bool unauthAttrNotRead;
+    private OriginatorInformation m_originatorInformation;
+
+    // TODO[api] Rename parameter to 'authenticatedData'
+    public CmsAuthenticatedDataParser(byte[] envelopedData)
+        : this(new MemoryStream(envelopedData, false))
+    {
+    }
+
+    // TODO[api] Rename parameter to 'authenticatedData'
+    public CmsAuthenticatedDataParser(Stream envelopedData)
+        : base(envelopedData)
+    {
+        this.authAttrNotRead = true;
+        this.authData = new AuthenticatedDataParser(
+            (Asn1SequenceParser)contentInfo.GetContent(Asn1Tags.Sequence));
+
+        // TODO Validate version?
+        //DerInteger version = this.authData.getVersion();
+
+        var originatorInfo = authData.GetOriginatorInfo();
+        m_originatorInformation = originatorInfo == null ? null : new OriginatorInformation(originatorInfo);
+
+        //
+        // read the recipients
+        //
+        Asn1Set recipientInfos = Asn1Set.GetInstance(authData.GetRecipientInfos().ToAsn1Object());
+
+        this.macAlg = authData.GetMacAlgorithm();
+
+        //
+        // read the authenticated content info
+        //
+        ContentInfoParser data = authData.GetEnapsulatedContentInfo();
+        CmsReadable readable = new CmsProcessableInputStream(
+            ((Asn1OctetStringParser)data.GetContent(Asn1Tags.OctetString)).GetOctetStream());
+        CmsSecureReadable secureReadable = new CmsEnvelopedHelper.CmsAuthenticatedSecureReadable(
+            this.macAlg, readable);
+
+        //
+        // build the RecipientInformationStore
+        //
+        this._recipientInfoStore = CmsEnvelopedHelper.BuildRecipientInformationStore(
+            recipientInfos, secureReadable);
+    }
+
+    /**
+     * Return the originator information associated with this message if present.
+     *
+     * @return OriginatorInformation, null if not present.
+     */
+    public OriginatorInformation OriginatorInformation => m_originatorInformation;
+
+    /**
+     * Return the MAC algorithm details for the MAC associated with the data in this object.
+     *
+     * @return AlgorithmIdentifier representing the MAC algorithm.
+     */
+    public AlgorithmIdentifier MacAlgorithmID => macAlg;
+
+    /**
+     * return the object identifier for the mac algorithm.
+     */
+    public string MacAlgOid => macAlg.Algorithm.GetID();
+
+    /**
+     * return the ASN.1 encoded encryption algorithm parameters, or null if
+     * there aren't any.
+     */
+    public Asn1Object MacAlgParams => macAlg.Parameters?.ToAsn1Object();
+
+    /**
+     * return a store of the intended recipients for this message
+     */
+    public RecipientInformationStore GetRecipientInfos() => _recipientInfoStore;
+
+    public byte[] GetMac()
+    {
+        if (mac == null)
+        {
+            GetAuthAttrs();
+            mac = authData.GetMac().GetOctets();
+        }
+        return Arrays.Clone(mac);
+    }
+
+    /**
+     * return a table of the unauthenticated attributes indexed by
+     * the OID of the attribute.
+     * @exception java.io.IOException
+     */
+    public Asn1.Cms.AttributeTable GetAuthAttrs()
+    {
+        if (authAttrs == null && authAttrNotRead)
+        {
+            Asn1SetParser s = authData.GetAuthAttrs();
+
+            authAttrNotRead = false;
+
+            if (s != null)
+            {
+                authAttrs = CmsUtilities.ParseAttributeTable(s);
+            }
+        }
+
+        return authAttrs;
+    }
+
+    /**
+     * return a table of the unauthenticated attributes indexed by
+     * the OID of the attribute.
+     * @exception java.io.IOException
+     */
+    public Asn1.Cms.AttributeTable GetUnauthAttrs()
+    {
+        if (unauthAttrs == null && unauthAttrNotRead)
+        {
+            Asn1SetParser s = authData.GetUnauthAttrs();
+
+            unauthAttrNotRead = false;
+
+            if (s != null)
+            {
+                unauthAttrs = CmsUtilities.ParseAttributeTable(s);
+            }
+        }
+
+        return unauthAttrs;
+    }
+}

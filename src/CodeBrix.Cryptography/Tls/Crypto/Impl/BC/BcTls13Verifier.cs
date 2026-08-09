@@ -1,0 +1,21 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Crypto.IO;
+
+namespace CodeBrix.Cryptography.Tls.Crypto.Impl.BC; //was previously: Org.BouncyCastle.Tls.Crypto.Impl.BC;
+
+internal sealed class BcTls13Verifier
+    : Tls13Verifier
+{
+    private readonly SignerSink m_output;
+
+    internal BcTls13Verifier(ISigner verifier)
+    {
+        m_output = new SignerSink(verifier ?? throw new ArgumentNullException(nameof(verifier)));
+    }
+
+    public Stream Stream => m_output;
+
+    public bool VerifySignature(byte[] signature) => m_output.Signer.VerifySignature(signature);
+}

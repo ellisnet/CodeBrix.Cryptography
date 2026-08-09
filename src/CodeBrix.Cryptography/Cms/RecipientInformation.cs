@@ -1,0 +1,90 @@
+using System;
+using System.IO;
+using CodeBrix.Cryptography.Asn1;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Security;
+using CodeBrix.Cryptography.Utilities;
+
+namespace CodeBrix.Cryptography.Cms; //was previously: Org.BouncyCastle.Cms;
+
+public abstract class RecipientInformation
+{
+    internal RecipientID rid = new RecipientID();
+    internal AlgorithmIdentifier keyEncAlg;
+    internal CmsSecureReadable secureReadable;
+
+    private byte[] resultMac;
+
+    internal RecipientInformation(AlgorithmIdentifier keyEncAlg, CmsSecureReadable secureReadable)
+    {
+        this.keyEncAlg = keyEncAlg;
+        this.secureReadable = secureReadable;
+    }
+
+    internal string GetContentAlgorithmName()
+    {
+        AlgorithmIdentifier algorithm = secureReadable.Algorithm;
+        //return CmsEnvelopedHelper.Instance.GetSymmetricCipherName(algorithm.Algorithm.Id);
+        return algorithm.Algorithm.Id;
+    }
+
+    public RecipientID RecipientID => rid;
+
+    public AlgorithmIdentifier KeyEncryptionAlgorithmID => keyEncAlg;
+
+    /// <summary>Return the object identifier for the key encryption algorithm.</summary>
+    public string KeyEncryptionAlgOid => keyEncAlg.Algorithm.GetID();
+
+    /// <summary>
+    /// Return the ASN.1 encoded key encryption algorithm parameters, or null if there aren't any.
+    /// </summary>
+    public Asn1Object KeyEncryptionAlgParams => keyEncAlg.Parameters?.ToAsn1Object();
+
+    internal CmsTypedStream GetContentFromSessionKey(KeyParameter sKey)
+    {
+        CmsReadable readable = secureReadable.GetReadable(sKey);
+
+        try
+        {
+            return new CmsTypedStream(readable.GetInputStream());
+        }
+        catch (IOException e)
+        {
+            throw new CmsException("error getting .", e);
+        }
+    }
+
+    public byte[] GetContent(ICipherParameters key)
+    {
+        try
+        {
+            return CmsUtilities.StreamToByteArray(GetContentStream(key).ContentStream);
+        }
+        catch (IOException e)
+        {
+            throw new Exception("unable to parse internal stream: " + e);
+        }
+    }
+
+    /// <summary>
+    /// Return the MAC calculated for the content stream. Note: this call is only meaningful once all the content
+    /// has been read.
+    /// </summary>
+    public byte[] GetMac()
+    {
+        if (resultMac == null)
+        {
+            object cryptoObject = secureReadable.CryptoObject;
+            if (cryptoObject is IMac mac)
+            {
+                resultMac = MacUtilities.DoFinal(mac);
+            }
+        }
+
+        return Arrays.Clone(resultMac);
+    }
+
+    public abstract CmsTypedStream GetContentStream(ICipherParameters key);
+}

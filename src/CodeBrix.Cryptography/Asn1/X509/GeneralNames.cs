@@ -1,0 +1,93 @@
+using System;
+using System.Text;
+using CodeBrix.Cryptography.Utilities;
+
+namespace CodeBrix.Cryptography.Asn1.X509; //was previously: Org.BouncyCastle.Asn1.X509;
+
+public class GeneralNames
+    : Asn1Encodable
+{
+    public static GeneralNames GetInstance(object obj)
+    {
+        if (obj == null)
+            return null;
+        if (obj is GeneralNames generalNames)
+            return generalNames;
+        return new GeneralNames(Asn1Sequence.GetInstance(obj));
+    }
+
+    public static GeneralNames GetInstance(Asn1TaggedObject obj, bool explicitly) =>
+        new GeneralNames(Asn1Sequence.GetInstance(obj, explicitly));
+
+    public static GeneralNames GetOptional(Asn1Encodable element)
+    {
+        if (element == null)
+            throw new ArgumentNullException(nameof(element));
+
+        if (element is GeneralNames generalNames)
+            return generalNames;
+
+        Asn1Sequence asn1Sequence = Asn1Sequence.GetOptional(element);
+        if (asn1Sequence != null)
+            return new GeneralNames(asn1Sequence);
+
+        return null;
+    }
+
+    public static GeneralNames GetTagged(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new GeneralNames(Asn1Sequence.GetTagged(taggedObject, declaredExplicit));
+
+    public static GeneralNames FromExtensions(X509Extensions extensions, DerObjectIdentifier extOid) =>
+        GetInstance(X509Extensions.GetExtensionParsedValue(extensions, extOid));
+
+    private readonly GeneralName[] m_names;
+
+    /// <summary>Construct a GeneralNames object containing one GeneralName.</summary>
+    /// <param name="name">The name to be contained.</param>
+    public GeneralNames(GeneralName name)
+    {
+        m_names = new GeneralName[]{
+            name ?? throw new ArgumentNullException(nameof(name))
+        };
+    }
+
+    public GeneralNames(GeneralName[] names)
+    {
+        if (Arrays.IsNullOrContainsNull(names))
+            throw new ArgumentNullException(nameof(names), "cannot be null, or contain null");
+
+        m_names = Copy(names);
+    }
+
+    private GeneralNames(Asn1Sequence seq)
+    {
+        m_names = seq.MapElements(GeneralName.GetInstance);
+    }
+
+    public int Count => m_names.Length;
+
+    public GeneralName[] GetNames() => Copy(m_names);
+
+    /// <summary>Produce an object suitable for an Asn1OutputStream.</summary>
+    /// <remarks>
+    /// <code>
+    /// GeneralNames ::= Sequence SIZE {1..MAX} OF GeneralName
+    /// </code>
+    /// </remarks>
+    public override Asn1Object ToAsn1Object() => DerSequence.FromElements(m_names);
+
+    public override string ToString()
+    {
+        StringBuilder buf = new StringBuilder();
+        buf.AppendLine("GeneralNames:");
+        foreach (GeneralName name in m_names)
+        {
+            buf.Append("    ")
+               .Append(name)
+               .AppendLine();
+        }
+        return buf.ToString();
+    }
+
+    private static GeneralName[] Copy(GeneralName[] names) => (GeneralName[])names.Clone();
+}

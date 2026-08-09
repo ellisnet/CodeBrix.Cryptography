@@ -1,0 +1,412 @@
+using System;
+using CodeBrix.Cryptography.Crypto.Macs;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Utilities;
+
+namespace CodeBrix.Cryptography.Crypto.Modes; //was previously: Org.BouncyCastle.Crypto.Modes;
+
+/**
+* A Two-Pass Authenticated-Encryption Scheme Optimized for Simplicity and
+* Efficiency - by M. Bellare, P. Rogaway, D. Wagner.
+*
+* http://www.cs.ucdavis.edu/~rogaway/papers/eax.pdf
+*
+* EAX is an AEAD scheme based on CTR and OMAC1/CMAC, that uses a single block
+* cipher to encrypt and authenticate data. It's on-line (the length of a
+* message isn't needed to begin processing it), has good performances, it's
+* simple and provably secure (provided the underlying block cipher is secure).
+*
+* Of course, this implementations is NOT thread-safe.
+*/
+public class EaxBlockCipher
+    : IAeadBlockCipher
+{
+    private enum Tag : byte { N, H, C };
+
+    private SicBlockCipher cipher;
+
+    private bool forEncryption;
+
+    private int blockSize;
+
+    private IMac mac;
+
+    private byte[] nonceMac;
+    private byte[] associatedTextMac;
+    private byte[] macBlock;
+
+    private int macSize;
+    private byte[] bufBlock;
+    private int bufOff;
+
+    private bool cipherInitialized;
+    private byte[] initialAssociatedText;
+
+    // Previous (nonce, key) seen on Init(true, ...) - used only to reject nonce reuse for encryption.
+    private byte[] lastNonce;
+    private byte[] lastKey;
+
+    /**
+    * Constructor that accepts an instance of a block cipher engine.
+    *
+    * @param cipher the engine to use
+    */
+    public EaxBlockCipher(IBlockCipher cipher)
+    {
+        blockSize = cipher.GetBlockSize();
+        mac = new CMac(cipher);
+        macBlock = new byte[blockSize];
+        associatedTextMac = new byte[mac.GetMacSize()];
+        nonceMac = new byte[mac.GetMacSize()];
+        this.cipher = new SicBlockCipher(cipher);
+    }
+
+    public virtual string AlgorithmName => cipher.UnderlyingCipher.AlgorithmName + "/EAX";
+
+    public virtual IBlockCipher UnderlyingCipher => cipher;
+
+    public virtual int GetBlockSize()
+    {
+        return cipher.GetBlockSize();
+    }
+
+    public virtual void Init(bool forEncryption, ICipherParameters parameters)
+    {
+        this.forEncryption = forEncryption;
+
+        KeyParameter keyParameter = null;
+        ReadOnlySpan<byte> nonce;
+
+        if (parameters is AeadParameters aeadParameters)
+        {
+            nonce = aeadParameters.Nonce;
+            initialAssociatedText = aeadParameters.GetAssociatedText();
+            macSize = GetMacSize(aeadParameters.MacSize, blockSize);
+            keyParameter = aeadParameters.Key;
+        }
+        else if (parameters is ParametersWithIV withIV)
+        {
+            nonce = withIV.InternalIV;
+            initialAssociatedText = null;
+            macSize = GetMacSize((mac.GetMacSize() / 2) * 8, blockSize);
+
+            if (withIV.Parameters != null)
+            {
+                keyParameter = withIV.Parameters as KeyParameter
+                    ?? throw new ArgumentException("invalid parameters passed to EAX");
+            }
+        }
+        else
+        {
+            throw new ArgumentException("invalid parameters passed to EAX");
+        }
+
+        // RFC 5116 sec. 2.1 requires every nonce passed to an AEAD encryption operation to be
+        // distinct for a given key; reuse is catastrophic (here CTR keystream reuse plus a forgeable
+        // OMAC). That standard places the obligation on the caller, so this guard enforces it
+        // defensively, mirroring GcmBlockCipher. A null key parameter (explicit key re-use,
+        // supported by the underlying CMac) combined with a repeated nonce is also caught. A fresh
+        // nonce or key, Reset(), or Init for decryption are all unaffected.
+        if (forEncryption)
+        {
+            if (lastNonce != null && nonce.SequenceEqual(lastNonce))
+            {
+                if (keyParameter == null)
+                    throw new ArgumentException("cannot reuse nonce for EAX encryption");
+
+                if (lastKey != null && keyParameter.FixedTimeEquals(lastKey))
+                    throw new ArgumentException("cannot reuse nonce for EAX encryption");
+            }
+        }
+
+        lastNonce = nonce.ToArray();
+        // NOTE: Very basic support for key re-use, but no performance gain from it
+        if (keyParameter != null)
+        {
+            lastKey = keyParameter.GetKey();
+        }
+
+        bufBlock = new byte[forEncryption ? blockSize : (blockSize + macSize)];
+
+        byte[] tag = new byte[blockSize];
+
+        // Key reuse implemented in CBC mode of underlying CMac
+        mac.Init(keyParameter);
+
+        tag[blockSize - 1] = (byte)Tag.N;
+        mac.BlockUpdate(tag, 0, blockSize);
+        mac.BlockUpdate(nonce);
+        mac.DoFinal(nonceMac, 0);
+
+        // Same BlockCipher underlies this and the mac, so reuse last key on cipher
+        cipher.Init(true, new ParametersWithIV(null, nonceMac));
+
+        Reset();
+    }
+
+    private void InitCipher()
+    {
+        if (cipherInitialized)
+            return;
+
+        cipherInitialized = true;
+
+        mac.DoFinal(associatedTextMac, 0);
+
+        byte[] tag = new byte[blockSize];
+        tag[blockSize - 1] = (byte)Tag.C;
+        mac.BlockUpdate(tag, 0, blockSize);
+    }
+
+    private void CalculateMac()
+    {
+        byte[] outC = new byte[blockSize];
+        mac.DoFinal(outC, 0);
+
+        for (int i = 0; i < macBlock.Length; i++)
+        {
+            macBlock[i] = (byte)(nonceMac[i] ^ associatedTextMac[i] ^ outC[i]);
+        }
+    }
+
+    public virtual void Reset()
+    {
+        Reset(true);
+    }
+
+    private void Reset(
+        bool clearMac)
+    {
+        cipher.Reset(); // TODO Redundant since the mac will reset it?
+        mac.Reset();
+
+        bufOff = 0;
+        Array.Clear(bufBlock, 0, bufBlock.Length);
+
+        if (clearMac)
+        {
+            Array.Clear(macBlock, 0, macBlock.Length);
+        }
+
+        byte[] tag = new byte[blockSize];
+        tag[blockSize - 1] = (byte)Tag.H;
+        mac.BlockUpdate(tag, 0, blockSize);
+
+        cipherInitialized = false;
+
+        if (initialAssociatedText != null)
+        {
+            ProcessAadBytes(initialAssociatedText, 0, initialAssociatedText.Length);
+        }
+    }
+
+    public virtual void ProcessAadByte(byte input)
+    {
+        if (cipherInitialized)
+            throw new InvalidOperationException("AAD data cannot be added after encryption/decryption processing has begun.");
+
+        mac.Update(input);
+    }
+
+    public virtual void ProcessAadBytes(byte[] inBytes, int inOff, int len)
+    {
+        if (cipherInitialized)
+            throw new InvalidOperationException("AAD data cannot be added after encryption/decryption processing has begun.");
+
+        mac.BlockUpdate(inBytes, inOff, len);
+    }
+
+    public virtual void ProcessAadBytes(ReadOnlySpan<byte> input)
+    {
+        if (cipherInitialized)
+            throw new InvalidOperationException("AAD data cannot be added after encryption/decryption processing has begun.");
+
+        mac.BlockUpdate(input);
+    }
+
+    public virtual int ProcessByte(byte input, byte[] outBytes, int outOff)
+    {
+        InitCipher();
+
+        return Process(input, Spans.FromNullable(outBytes, outOff));
+    }
+
+    public virtual int ProcessByte(byte input, Span<byte> output)
+    {
+        InitCipher();
+
+        return Process(input, output);
+    }
+
+    public virtual int ProcessBytes(byte[] inBytes, int inOff, int len, byte[] outBytes, int outOff)
+    {
+        Check.DataLength(inBytes, inOff, len, "input buffer too short");
+
+        return ProcessBytes(inBytes.AsSpan(inOff, len), Spans.FromNullable(outBytes, outOff));
+    }
+
+    public virtual int ProcessBytes(ReadOnlySpan<byte> input, Span<byte> output)
+    {
+        InitCipher();
+
+        int len = input.Length;
+        int resultLen = 0;
+
+        for (int i = 0; i != len; i++)
+        {
+            resultLen += Process(input[i], output[resultLen..]);
+        }
+
+        return resultLen;
+    }
+
+    public virtual int DoFinal(byte[] outBytes, int outOff)
+    {
+        return DoFinal(outBytes.AsSpan(outOff));
+    }
+
+    public virtual int DoFinal(Span<byte> output)
+    {
+        InitCipher();
+
+        int extra = bufOff;
+        int tmpLength = bufBlock.Length;
+
+        Span<byte> tmp = tmpLength <= 128
+            ? stackalloc byte[tmpLength]
+            : new byte[tmpLength];
+
+        bufOff = 0;
+
+        if (forEncryption)
+        {
+            Check.OutputLength(output, extra + macSize, "output buffer too short");
+
+            cipher.ProcessBlock(bufBlock, tmp);
+
+            tmp[..extra].CopyTo(output);
+
+            mac.BlockUpdate(tmp[..extra]);
+
+            CalculateMac();
+
+            macBlock.AsSpan(0, macSize).CopyTo(output[extra..]);
+
+            Reset(false);
+
+            return extra + macSize;
+        }
+        else
+        {
+            if (extra < macSize)
+                throw new InvalidCipherTextException("data too short");
+
+            Check.OutputLength(output, extra - macSize, "output buffer too short");
+
+            if (extra > macSize)
+            {
+                mac.BlockUpdate(bufBlock.AsSpan(0, extra - macSize));
+
+                cipher.ProcessBlock(bufBlock, tmp);
+
+                tmp[..(extra - macSize)].CopyTo(output);
+            }
+
+            CalculateMac();
+
+            if (!VerifyMac(bufBlock, extra - macSize))
+                throw new InvalidCipherTextException("mac check in EAX failed");
+
+            Reset(false);
+
+            return extra - macSize;
+        }
+    }
+
+    public virtual byte[] GetMac()
+    {
+        byte[] mac = new byte[macSize];
+
+        Array.Copy(macBlock, 0, mac, 0, macSize);
+
+        return mac;
+    }
+
+    public virtual int GetUpdateOutputSize(int len)
+    {
+        int totalData = len + bufOff;
+        if (!forEncryption)
+        {
+            if (totalData < macSize)
+            {
+                return 0;
+            }
+            totalData -= macSize;
+        }
+        return totalData - totalData % blockSize;
+    }
+
+    public virtual int GetOutputSize(int len)
+    {
+        int totalData = len + bufOff;
+
+        if (forEncryption)
+        {
+            return totalData + macSize;
+        }
+
+        return totalData < macSize ? 0 : totalData - macSize;
+    }
+
+    private int Process(byte b, Span<byte> output)
+    {
+        bufBlock[bufOff++] = b;
+
+        if (bufOff == bufBlock.Length)
+        {
+            Check.OutputLength(output, blockSize, "output buffer too short");
+
+            // TODO Could move the ProcessByte(s) calls to here
+            //InitCipher();
+
+            int size;
+
+            if (forEncryption)
+            {
+                size = cipher.ProcessBlock(bufBlock, output);
+
+                mac.BlockUpdate(output[..blockSize]);
+            }
+            else
+            {
+                mac.BlockUpdate(bufBlock.AsSpan(0, blockSize));
+
+                size = cipher.ProcessBlock(bufBlock, output);
+            }
+
+            bufOff = 0;
+            if (!forEncryption)
+            {
+                Array.Copy(bufBlock, blockSize, bufBlock, 0, macSize);
+                bufOff = macSize;
+            }
+
+            return size;
+        }
+
+        return 0;
+    }
+
+    private bool VerifyMac(byte[] mac, int off)
+    {
+        return Arrays.FixedTimeEquals(macSize, mac, off, macBlock, 0);
+    }
+
+    private static int GetMacSize(int requestedMacBits, int blockSize)
+    {
+        if (requestedMacBits < 32 || requestedMacBits > blockSize * 8 || 0 != (requestedMacBits & 7))
+            throw new ArgumentException("Invalid value for MAC size: " + requestedMacBits);
+
+        return requestedMacBits >> 3;
+    }
+}

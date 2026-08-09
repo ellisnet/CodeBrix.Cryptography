@@ -1,0 +1,53 @@
+using CodeBrix.Cryptography.Crypto.Digests;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Crypto.Tests; //was previously: Org.BouncyCastle.Crypto.Tests;
+
+/**
+ * standard vector test for SHA-224 from RFC 3874 - only the last three are in
+ * the RFC.
+ */
+public class Sha224DigestTest
+    : DigestTest
+{
+    private static readonly string[] Messages =
+    {
+        "",
+        "a",
+        "abc",
+        "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+    };
+
+    private static readonly string[] Digests =
+    {
+        "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+        "abd37534c7d9a2efb9465de931cd7055ffdb8879563ae98078d6d6d5",
+        "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7",
+        "75388b16512776cc5dba5da1fd890150b0c6455cb4f58b1952522525",
+    };
+
+    // 1 million 'a'
+    private const string MillionADigest = "20794655980c91d8bbb4c1ea97618a4bf03f42581948b2ee4ee7ad67";
+
+    public Sha224DigestTest()
+        : base(new Sha224Digest(), Messages, Digests)
+    {
+    }
+
+    public override void PerformTest()
+    {
+        base.PerformTest();
+
+        MillionATest(MillionADigest);
+    }
+
+    protected override IDigest CloneDigest(IDigest digest) => new Sha224Digest((Sha224Digest)digest);
+
+    [Fact]
+    public void TestFunction()
+    {
+        string resultText = Perform().ToString();
+
+        Assert.Equal(Name + ": Okay", resultText);
+    }
+}

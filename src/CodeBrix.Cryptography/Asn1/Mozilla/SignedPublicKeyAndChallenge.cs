@@ -1,0 +1,75 @@
+using System;
+using CodeBrix.Cryptography.Asn1.X509;
+
+namespace CodeBrix.Cryptography.Asn1.Mozilla; //was previously: Org.BouncyCastle.Asn1.Mozilla;
+
+/// <summary>
+/// For parsing the SignedPublicKeyAndChallenge created by the KEYGEN tag included by Mozilla based browsers.
+/// </summary>
+/// <remarks>
+/// <code>
+/// SignedPublicKeyAndChallenge ::= SEQUENCE
+/// {
+///     publicKeyAndChallenge   PublicKeyAndChallenge,
+///     signatureAlgorithm      AlgorithmIdentifier,
+///     signature               BIT STRING
+/// }
+/// </code>
+/// </remarks>
+public class SignedPublicKeyAndChallenge
+    : Asn1Encodable
+{
+    public static SignedPublicKeyAndChallenge GetInstance(object obj)
+    {
+        if (obj == null)
+            return null;
+        if (obj is SignedPublicKeyAndChallenge signedPublicKeyAndChallenge)
+            return signedPublicKeyAndChallenge;
+        return new SignedPublicKeyAndChallenge(Asn1Sequence.GetInstance(obj));
+    }
+
+    public static SignedPublicKeyAndChallenge GetInstance(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new SignedPublicKeyAndChallenge(Asn1Sequence.GetInstance(taggedObject, declaredExplicit));
+
+    public static SignedPublicKeyAndChallenge GetTagged(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new SignedPublicKeyAndChallenge(Asn1Sequence.GetTagged(taggedObject, declaredExplicit));
+
+    private readonly PublicKeyAndChallenge m_publicKeyAndChallenge;
+    private readonly AlgorithmIdentifier m_signatureAlgorithm;
+    private readonly DerBitString m_signature;
+
+    public SignedPublicKeyAndChallenge(PublicKeyAndChallenge publicKeyAndChallenge,
+        AlgorithmIdentifier signatureAlgorithm, DerBitString signature)
+    {
+        m_publicKeyAndChallenge = publicKeyAndChallenge
+            ?? throw new ArgumentNullException(nameof(publicKeyAndChallenge));
+        m_signatureAlgorithm = signatureAlgorithm ?? throw new ArgumentNullException(nameof(signatureAlgorithm));
+        m_signature = signature ?? throw new ArgumentNullException(nameof(signature));
+    }
+
+    private SignedPublicKeyAndChallenge(Asn1Sequence seq)
+    {
+        if (seq == null)
+            throw new ArgumentNullException(nameof(seq));
+
+        int count = seq.Count, pos = 0;
+        if (count != 3)
+            throw new ArgumentException("Bad sequence size: " + count, nameof(seq));
+
+        m_publicKeyAndChallenge = Asn1Utilities.Read(seq, ref pos, PublicKeyAndChallenge.GetInstance);
+        m_signatureAlgorithm = Asn1Utilities.Read(seq, ref pos, AlgorithmIdentifier.GetInstance);
+        m_signature = Asn1Utilities.Read(seq, ref pos, DerBitString.GetInstance);
+
+        if (pos != count)
+            throw new ArgumentException("Unexpected elements in sequence", nameof(seq));
+    }
+
+    public PublicKeyAndChallenge PublicKeyAndChallenge => m_publicKeyAndChallenge;
+
+    public DerBitString Signature => m_signature;
+
+    public AlgorithmIdentifier SignatureAlgorithm => m_signatureAlgorithm;
+
+    public override Asn1Object ToAsn1Object() =>
+        new DerSequence(m_publicKeyAndChallenge, m_signatureAlgorithm, m_signature);
+}

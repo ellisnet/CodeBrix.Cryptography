@@ -1,0 +1,18 @@
+using System.IO;
+
+namespace CodeBrix.Cryptography.Bcpg.OpenPgp; //was previously: Org.BouncyCastle.Bcpg.OpenPgp;
+
+public class PgpReserved
+    : PgpObject
+{
+    private readonly ReservedPacket m_packet;
+
+    internal PgpReserved(BcpgInputStream bcpgInput)
+    {
+        Packet packet = bcpgInput.ReadPacket();
+        if (!(packet is ReservedPacket reservedPacket))
+            throw new IOException("unexpected packet in stream: " + packet);
+
+        m_packet = reservedPacket;
+    }
+}

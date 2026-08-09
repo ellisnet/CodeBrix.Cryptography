@@ -1,0 +1,119 @@
+using System;
+using CodeBrix.Cryptography.Asn1.Pkcs;
+using CodeBrix.Cryptography.Math;
+
+namespace CodeBrix.Cryptography.Crypto.Parameters; //was previously: Org.BouncyCastle.Crypto.Parameters;
+
+/// <summary>RSA key parameters for use with the Chinese Remainder Theorem.</summary>
+public class RsaPrivateCrtKeyParameters
+    : RsaKeyParameters
+{
+    private readonly BigInteger e, p, q, dP, dQ, qInv;
+
+    /// <summary>Initializes a new instance of <see cref="RsaPrivateCrtKeyParameters"/>.</summary>
+    /// <param name="modulus">The RSA modulus.</param>
+    /// <param name="publicExponent">The public exponent.</param>
+    /// <param name="privateExponent">The private exponent.</param>
+    /// <param name="p">The first prime factor (p) of the modulus.</param>
+    /// <param name="q">The second prime factor (q) of the modulus.</param>
+    /// <param name="dP">The CRT exponent for prime p.</param>
+    /// <param name="dQ">The CRT exponent for prime q.</param>
+    /// <param name="qInv">The CRT coefficient (inverse of q mod p).</param>
+    public RsaPrivateCrtKeyParameters(
+        BigInteger modulus,
+        BigInteger publicExponent,
+        BigInteger privateExponent,
+        BigInteger p,
+        BigInteger q,
+        BigInteger dP,
+        BigInteger dQ,
+        BigInteger qInv)
+        : this(modulus, publicExponent, privateExponent, p, q, dP, dQ, qInv, isInternal: false)
+    {
+    }
+
+    public RsaPrivateCrtKeyParameters(RsaPrivateKeyStructure rsaPrivateKey)
+        : this(
+            rsaPrivateKey.Modulus,
+            rsaPrivateKey.PublicExponent,
+            rsaPrivateKey.PrivateExponent,
+            rsaPrivateKey.Prime1,
+            rsaPrivateKey.Prime2,
+            rsaPrivateKey.Exponent1,
+            rsaPrivateKey.Exponent2,
+            rsaPrivateKey.Coefficient)
+    {
+    }
+
+    internal RsaPrivateCrtKeyParameters(
+        BigInteger modulus,
+        BigInteger publicExponent,
+        BigInteger privateExponent,
+        BigInteger p,
+        BigInteger q,
+        BigInteger dP,
+        BigInteger dQ,
+        BigInteger qInv,
+        bool isInternal)
+        : base(isPrivate: true, modulus, privateExponent, isInternal)
+    {
+        ValidateValue(publicExponent, "publicExponent", "exponent");
+        ValidateValue(p, "p", "P value");
+        ValidateValue(q, "q", "Q value");
+        ValidateValue(dP, "dP", "DP value");
+        ValidateValue(dQ, "dQ", "DQ value");
+        ValidateValue(qInv, "qInv", "InverseQ value");
+
+        this.e = publicExponent;
+        this.p = p;
+        this.q = q;
+        this.dP = dP;
+        this.dQ = dQ;
+        this.qInv = qInv;
+    }
+
+    /// <summary>Gets the public exponent.</summary>
+    public BigInteger PublicExponent => e;
+
+    /// <summary>Gets the first prime factor (p) of the modulus.</summary>
+    public BigInteger P => p;
+
+    /// <summary>Gets the second prime factor (q) of the modulus.</summary>
+    public BigInteger Q => q;
+
+    /// <summary>Gets the CRT exponent for prime p.</summary>
+    public BigInteger DP => dP;
+
+    /// <summary>Gets the CRT exponent for prime q.</summary>
+    public BigInteger DQ => dQ;
+
+    /// <summary>Gets the CRT coefficient (inverse of q mod p).</summary>
+    public BigInteger QInv => qInv;
+
+    public override bool Equals(object obj)
+    {
+        return obj is RsaPrivateCrtKeyParameters that
+            && this.DP.Equals(that.DP)
+            && this.DQ.Equals(that.DQ)
+            && this.Exponent.Equals(that.Exponent)
+            && this.Modulus.Equals(that.Modulus)
+            && this.P.Equals(that.P)
+            && this.Q.Equals(that.Q)
+            && this.PublicExponent.Equals(that.PublicExponent)
+            && this.QInv.Equals(that.QInv);
+    }
+
+    public override int GetHashCode()
+    {
+        return DP.GetHashCode() ^ DQ.GetHashCode() ^ Exponent.GetHashCode() ^ Modulus.GetHashCode()
+            ^ P.GetHashCode() ^ Q.GetHashCode() ^ PublicExponent.GetHashCode() ^ QInv.GetHashCode();
+    }
+
+    private static void ValidateValue(BigInteger x, string name, string desc)
+    {
+        if (x == null)
+            throw new ArgumentNullException(name);
+        if (x.SignValue <= 0)
+            throw new ArgumentException("Not a valid RSA " + desc, name);
+    }
+}

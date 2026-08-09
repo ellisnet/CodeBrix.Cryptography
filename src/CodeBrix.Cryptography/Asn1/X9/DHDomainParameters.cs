@@ -1,0 +1,87 @@
+using System;
+
+namespace CodeBrix.Cryptography.Asn1.X9; //was previously: Org.BouncyCastle.Asn1.X9;
+
+[Obsolete("Use 'DomainParameters' instead")]
+public class DHDomainParameters
+    : Asn1Encodable
+{
+    public static DHDomainParameters GetInstance(object obj)
+    {
+        if (obj == null)
+            return null;
+        if (obj is DHDomainParameters dhDomainParameters)
+            return dhDomainParameters;
+        return new DHDomainParameters(Asn1Sequence.GetInstance(obj));
+    }
+
+    public static DHDomainParameters GetInstance(Asn1TaggedObject obj, bool isExplicit) =>
+        new DHDomainParameters(Asn1Sequence.GetInstance(obj, isExplicit));
+
+    public static DHDomainParameters GetTagged(Asn1TaggedObject taggedObject, bool declaredExplicit) =>
+        new DHDomainParameters(Asn1Sequence.GetTagged(taggedObject, declaredExplicit));
+
+    private readonly DerInteger m_p, m_g, m_q, m_j;
+    private readonly ValidationParams m_validationParams;
+
+    private DHDomainParameters(Asn1Sequence seq)
+    {
+        int count = seq.Count, pos = 0;
+        if (count < 3 || count > 5)
+            throw new ArgumentException("Bad sequence size: " + count, nameof(seq));
+
+        m_p = Asn1Utilities.Read(seq, ref pos, DerInteger.GetInstance);
+        m_g = Asn1Utilities.Read(seq, ref pos, DerInteger.GetInstance);
+        m_q = Asn1Utilities.Read(seq, ref pos, DerInteger.GetInstance);
+        m_j = Asn1Utilities.ReadOptional(seq, ref pos, DerInteger.GetOptional);
+        m_validationParams = Asn1Utilities.ReadOptional(seq, ref pos, ValidationParams.GetOptional);
+
+        if (pos != count)
+            throw new ArgumentException("Unexpected elements in sequence", nameof(seq));
+    }
+
+    [Obsolete("Use constructor taking 'ValidationParams' instead")]
+    public DHDomainParameters(DerInteger p, DerInteger g, DerInteger q, DerInteger j,
+        DHValidationParms validationParms)
+    {
+        m_p = p ?? throw new ArgumentNullException(nameof(p));
+        m_g = g ?? throw new ArgumentNullException(nameof(g));
+        m_q = q ?? throw new ArgumentNullException(nameof(q));
+        m_j = j;
+        m_validationParams = validationParms == null
+            ? null
+            : new ValidationParams(validationParms.Seed, validationParms.PgenCounter);
+    }
+
+    public DHDomainParameters(DerInteger p, DerInteger g, DerInteger q, DerInteger j,
+        ValidationParams validationParams)
+    {
+        m_p = p ?? throw new ArgumentNullException(nameof(p));
+        m_g = g ?? throw new ArgumentNullException(nameof(g));
+        m_q = q ?? throw new ArgumentNullException(nameof(q));
+        m_j = j;
+        m_validationParams = validationParams;
+    }
+
+    public DerInteger P => m_p;
+
+    public DerInteger G => m_g;
+
+    public DerInteger Q => m_q;
+
+    public DerInteger J => m_j;
+
+    [Obsolete("Use 'ValidationParams' instead")]
+    public DHValidationParms ValidationParms =>
+        new DHValidationParms(m_validationParams.Seed, m_validationParams.PgenCounter);
+
+    public ValidationParams ValidationParams => m_validationParams;
+
+    public override Asn1Object ToAsn1Object()
+    {
+        Asn1EncodableVector v = new Asn1EncodableVector(5);
+        v.Add(m_p, m_g, m_q);
+        v.AddOptional(m_j, m_validationParams);
+        return new DerSequence(v);
+    }
+}

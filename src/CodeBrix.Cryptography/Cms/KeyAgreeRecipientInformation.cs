@@ -1,0 +1,215 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using CodeBrix.Cryptography.Asn1;
+using CodeBrix.Cryptography.Asn1.Cms;
+using CodeBrix.Cryptography.Asn1.Cms.Ecc;
+using CodeBrix.Cryptography.Asn1.CryptoPro;
+using CodeBrix.Cryptography.Asn1.Pkcs;
+using CodeBrix.Cryptography.Asn1.X509;
+using CodeBrix.Cryptography.Asn1.X9;
+using CodeBrix.Cryptography.Crypto;
+using CodeBrix.Cryptography.Crypto.Parameters;
+using CodeBrix.Cryptography.Math;
+using CodeBrix.Cryptography.Pkcs;
+using CodeBrix.Cryptography.Security;
+
+namespace CodeBrix.Cryptography.Cms; //was previously: Org.BouncyCastle.Cms;
+
+/**
+* the RecipientInfo class for a recipient who has been sent a message
+* encrypted using key agreement.
+*/
+public class KeyAgreeRecipientInformation
+    : RecipientInformation
+{
+    private readonly KeyAgreeRecipientInfo m_info;
+    private readonly Asn1OctetString m_encryptedKey;
+
+    internal static void ReadRecipientInfo(IList<RecipientInformation> infos, KeyAgreeRecipientInfo info,
+        CmsSecureReadable secureReadable)
+    {
+        try
+        {
+            foreach (Asn1Encodable element in info.RecipientEncryptedKeys)
+            {
+                RecipientEncryptedKey id = RecipientEncryptedKey.GetInstance(element);
+                Asn1.Cms.KeyAgreeRecipientIdentifier karid = id.Identifier;
+                Asn1.Cms.IssuerAndSerialNumber iAndSN = karid.IssuerAndSerialNumber;
+
+                RecipientID rid = new RecipientID();
+                if (iAndSN != null)
+                {
+                    rid.Issuer = iAndSN.Issuer;
+                    rid.SerialNumber = iAndSN.SerialNumber.Value;
+                }
+                else
+                {
+                    // Note: 'date' and 'other' fields of RecipientKeyIdentifier appear to be only informational
+
+                    rid.SubjectKeyIdentifier = karid.RKeyID.SubjectKeyIdentifier.GetEncoded(Asn1Encodable.Der);
+                }
+
+                infos.Add(new KeyAgreeRecipientInformation(info, rid, id.EncryptedKey, secureReadable));
+            }
+        }
+        catch (IOException e)
+        {
+            throw new ArgumentException("invalid rid in KeyAgreeRecipientInformation", e);
+        }
+    }
+
+    internal KeyAgreeRecipientInformation(KeyAgreeRecipientInfo info, RecipientID rid, Asn1OctetString encryptedKey,
+        CmsSecureReadable secureReadable)
+        : base(info.KeyEncryptionAlgorithm, secureReadable)
+    {
+        m_info = info;
+        this.rid = rid;
+        m_encryptedKey = encryptedKey;
+    }
+
+    private AsymmetricKeyParameter GetSenderPublicKey(AsymmetricKeyParameter receiverPrivateKey,
+        OriginatorIdentifierOrKey originator)
+    {
+        OriginatorPublicKey originatorKey = originator.OriginatorKey;
+        if (originatorKey != null)
+            return GetPublicKeyFromOriginatorPublicKey(receiverPrivateKey, originatorKey);
+
+        OriginatorID origID = new OriginatorID();
+
+        Asn1.Cms.IssuerAndSerialNumber issuerAndSerialNumber = originator.IssuerAndSerialNumber;
+        if (issuerAndSerialNumber != null)
+        {
+            origID.Issuer = issuerAndSerialNumber.Issuer;
+            origID.SerialNumber = issuerAndSerialNumber.SerialNumber.Value;
+        }
+        else
+        {
+            origID.SubjectKeyIdentifier = originator.SubjectKeyIdentifier.GetEncoded(Asn1Encodable.Der);
+        }
+
+        return GetPublicKeyFromOriginatorID(origID);
+    }
+
+    private static AsymmetricKeyParameter GetPublicKeyFromOriginatorPublicKey(AsymmetricKeyParameter receiverPrivateKey,
+        OriginatorPublicKey originatorPublicKey)
+    {
+        PrivateKeyInfo privInfo = PrivateKeyInfoFactory.CreatePrivateKeyInfo(receiverPrivateKey);
+        SubjectPublicKeyInfo pubInfo = new SubjectPublicKeyInfo(privInfo.PrivateKeyAlgorithm,
+            originatorPublicKey.PublicKey);
+        return PublicKeyFactory.CreateKey(pubInfo);
+    }
+
+    private AsymmetricKeyParameter GetPublicKeyFromOriginatorID(
+        OriginatorID origID)
+    {
+        // TODO Support all alternatives for OriginatorIdentifierOrKey
+        // see RFC 3852 6.2.2
+        throw new CmsException("No support for 'originator' as IssuerAndSerialNumber or SubjectKeyIdentifier");
+    }
+
+    private static KeyParameter CalculateAgreedWrapKey(AlgorithmIdentifier agreeAlgID,
+        AlgorithmIdentifier wrapAlgID, AsymmetricKeyParameter senderPublicKey, Asn1OctetString userKeyingMaterial,
+        AsymmetricKeyParameter receiverPrivateKey)
+    {
+        DerObjectIdentifier agreeAlgOid = agreeAlgID.Algorithm;
+
+        ICipherParameters senderPublicParams = senderPublicKey;
+        ICipherParameters receiverPrivateParams = receiverPrivateKey;
+
+        if (CmsUtilities.IsMqv(agreeAlgOid))
+        {
+            MQVuserKeyingMaterial ukm = MQVuserKeyingMaterial.GetInstance(userKeyingMaterial.GetOctets());
+
+            AsymmetricKeyParameter ephemeralKey = GetPublicKeyFromOriginatorPublicKey(
+                receiverPrivateKey, ukm.EphemeralPublicKey);
+
+            senderPublicParams = new MqvPublicParameters(
+                (ECPublicKeyParameters)senderPublicParams,
+                (ECPublicKeyParameters)ephemeralKey);
+            receiverPrivateParams = new MqvPrivateParameters(
+                (ECPrivateKeyParameters)receiverPrivateParams,
+                (ECPrivateKeyParameters)receiverPrivateParams);
+        }
+        else
+        {
+            // TODO[cms] bc-java has other consumers of userKeyingMaterial in EC, GOST, RFC2631 branches
+        }
+
+        /*
+         * TODO[cms] This seems like the place where the original wrapAlgID.Parameters gets lost so that
+         * ECDHKekGenerator ultimately has to rebuild the AlgorithmIdentifier that it gives to ECC_CMS_SharedInfo.
+         * This leads to broken signatures (especially for AES, since it always rebuilds with ASN.1 NULL).
+         * Instead, the full wrapAlgID needs to propagate throughout.
+         */
+        DerObjectIdentifier wrapAlgOid = wrapAlgID.Algorithm;
+        IBasicAgreement agreement = AgreementUtilities.GetBasicAgreementWithKdf(agreeAlgOid, wrapAlgOid);
+        agreement.Init(receiverPrivateParams);
+        BigInteger agreedValue = agreement.CalculateAgreement(senderPublicParams);
+
+        int wrapKeySize = GeneratorUtilities.GetDefaultKeySize(wrapAlgOid) / 8;
+        byte[] wrapKeyBytes = X9IntegerConverter.IntegerToBytes(agreedValue, wrapKeySize);
+        return ParameterUtilities.CreateKeyParameter(wrapAlgOid, wrapKeyBytes);
+    }
+
+    private KeyParameter UnwrapSessionKey(DerObjectIdentifier wrapAlgOid, KeyParameter agreedKey)
+    {
+        byte[] encKeyOctets = m_encryptedKey.GetOctets();
+
+        IWrapper keyCipher = WrapperUtilities.GetWrapper(wrapAlgOid);
+        keyCipher.Init(false, agreedKey);
+        byte[] sKeyBytes = keyCipher.Unwrap(encKeyOctets, 0, encKeyOctets.Length);
+        return ParameterUtilities.CreateKeyParameter(GetContentAlgorithmName(), sKeyBytes);
+    }
+
+    internal KeyParameter GetSessionKey(AsymmetricKeyParameter receiverPrivateKey)
+    {
+        try
+        {
+            AlgorithmIdentifier wrapAlgID = AlgorithmIdentifier.GetInstance(keyEncAlg.Parameters);
+
+            AsymmetricKeyParameter senderPublicKey = GetSenderPublicKey(receiverPrivateKey, m_info.Originator);
+
+            KeyParameter agreedWrapKey = CalculateAgreedWrapKey(keyEncAlg, wrapAlgID, senderPublicKey,
+                m_info.UserKeyingMaterial, receiverPrivateKey);
+
+            DerObjectIdentifier wrapAlgOid = wrapAlgID.Algorithm;
+            if (CryptoProObjectIdentifiers.id_Gost28147_89_None_KeyWrap.Equals(wrapAlgOid) ||
+                CryptoProObjectIdentifiers.id_Gost28147_89_CryptoPro_KeyWrap.Equals(wrapAlgOid))
+            {
+                // TODO[cms] GOST key wrapping
+            }
+
+            return UnwrapSessionKey(wrapAlgOid, agreedWrapKey);
+        }
+        catch (SecurityUtilityException e)
+        {
+            throw new CmsException("couldn't create cipher.", e);
+        }
+        catch (InvalidKeyException e)
+        {
+            throw new CmsException("key invalid in message.", e);
+        }
+        catch (Exception e)
+        {
+            throw new CmsException("originator key invalid.", e);
+        }
+    }
+
+    /**
+    * decrypt the content and return an input stream.
+    */
+    public override CmsTypedStream GetContentStream(
+        ICipherParameters key)
+    {
+        if (!(key is AsymmetricKeyParameter receiverPrivateKey))
+            throw new ArgumentException("KeyAgreement requires asymmetric key", "key");
+
+        if (!receiverPrivateKey.IsPrivate)
+            throw new ArgumentException("Expected private key", "key");
+
+        KeyParameter sKey = GetSessionKey(receiverPrivateKey);
+
+        return GetContentFromSessionKey(sKey);
+    }
+}

@@ -1,0 +1,95 @@
+using System;
+using Xunit;
+
+namespace CodeBrix.Cryptography.Utilities.UtilTests; //was previously: Org.BouncyCastle.Utilities.UtilTests;
+
+public class IntegersTest
+{
+    [Fact]
+    public void HighestOneBit()
+    {
+        for (int i = 0; i < 31; ++i)
+        {
+            Assert.Equal(1 << (31 - i), Integers.HighestOneBit((int)(0x80000000U >> i)));
+            Assert.Equal(1 << (31 - i), Integers.HighestOneBit((int)(0xFFFFFFFFU >> i)));
+        }
+
+        Assert.Equal(1, Integers.HighestOneBit(1));
+        Assert.Equal(0, Integers.HighestOneBit(0));
+    }
+
+    [Fact]
+    public void LowestOneBit()
+    {
+        for (int i = 0; i < 31; ++i)
+        {
+            Assert.Equal(1 << i, Integers.LowestOneBit((int)(0x00000001U << i)));
+            Assert.Equal(1 << i, Integers.LowestOneBit((int)(0xFFFFFFFFU << i)));
+        }
+
+        Assert.Equal(1, Integers.LowestOneBit(1));
+        Assert.Equal(0, Integers.LowestOneBit(0));
+    }
+
+    [Fact]
+    public void NumberOfLeadingZeros()
+    {
+        for (int i = 0; i < 31; ++i)
+        {
+            Assert.Equal(i, Integers.NumberOfLeadingZeros((int)(0x80000000U >> i)));
+            Assert.Equal(i, Integers.NumberOfLeadingZeros((int)(0xFFFFFFFFU >> i)));
+        }
+
+        Assert.Equal(31, Integers.NumberOfLeadingZeros(1));
+        Assert.Equal(32, Integers.NumberOfLeadingZeros(0));
+    }
+
+    [Fact]
+    public void NumberOfTrailingZeros()
+    {
+        for (int i = 0; i < 31; ++i)
+        {
+            Assert.Equal(i, Integers.NumberOfTrailingZeros(1 << i));
+            Assert.Equal(i, Integers.NumberOfTrailingZeros(-1 << i));
+        }
+
+        Assert.Equal(31, Integers.NumberOfTrailingZeros(int.MinValue));
+        Assert.Equal(32, Integers.NumberOfTrailingZeros(0));
+    }
+
+    [Fact]
+    public void PopCount()
+    {
+        Random random = new Random();
+
+        for (int round = 0; round < 10; ++round)
+        {
+            int rand = random.Next() << 8;
+            int init = SimpleBitCount(rand, 8, 32);
+
+            for (int i = 0; i <= 0xFF; ++i)
+            {
+                int pattern = rand | i;
+                int expected = init + SimpleBitCount(i, 0, 8);
+
+                for (int pos = 0; pos < 32; ++pos)
+                {
+                    int input = Integers.RotateLeft(pattern, pos);
+
+                    Assert.Equal(expected, Integers.PopCount(input));
+                    Assert.Equal(expected, Integers.PopCount((uint)input));
+                }
+            }
+        }
+    }
+
+    private static int SimpleBitCount(int n, int lo, int hi)
+    {
+        int count = 0;
+        for (int i = lo; i < hi; ++i)
+        {
+            count += (n >> i) & 1;
+        }
+        return count;
+    }
+}

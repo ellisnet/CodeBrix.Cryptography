@@ -1,0 +1,104 @@
+using System;
+using CodeBrix.Cryptography.Security;
+
+namespace CodeBrix.Cryptography.Crypto; //was previously: Org.BouncyCastle.Crypto;
+
+public class BufferedStreamCipher
+    : BufferedCipherBase
+{
+    private readonly IStreamCipher m_cipher;
+
+    public BufferedStreamCipher(IStreamCipher cipher)
+    {
+        m_cipher = cipher ?? throw new ArgumentNullException(nameof(cipher));
+    }
+
+    public override string AlgorithmName => m_cipher.AlgorithmName;
+
+    public override void Init(bool forEncryption, ICipherParameters parameters) =>
+        m_cipher.Init(forEncryption, ParameterUtilities.IgnoreRandom(parameters));
+
+    public override int GetBlockSize() => 0;
+
+    public override int GetOutputSize(int inputLen) => inputLen;
+
+    public override int GetUpdateOutputSize(int inputLen) => inputLen;
+
+    public override byte[] ProcessByte(byte input) => new byte[]{ m_cipher.ReturnByte(input) };
+
+    public override int ProcessByte(byte input, byte[] output, int outOff)
+    {
+        if (outOff >= output.Length)
+            throw new DataLengthException("output buffer too short");
+
+        output[outOff] = m_cipher.ReturnByte(input);
+        return 1;
+    }
+
+    public override int ProcessByte(byte input, Span<byte> output)
+    {
+        output[0] = m_cipher.ReturnByte(input);
+        return 1;
+    }
+
+    public override byte[] ProcessBytes(byte[] input, int inOff, int length)
+    {
+        if (length < 1)
+            return null;
+
+        byte[] output = new byte[length];
+        m_cipher.ProcessBytes(input, inOff, length, output, 0);
+        return output;
+    }
+
+    public override int ProcessBytes(byte[] input, int inOff, int length, byte[] output, int outOff)
+    {
+        if (length < 1)
+            return 0;
+
+        m_cipher.ProcessBytes(input, inOff, length, output, outOff);
+        return length;
+    }
+
+    public override int ProcessBytes(ReadOnlySpan<byte> input, Span<byte> output)
+    {
+        m_cipher.ProcessBytes(input, output);
+        return input.Length;
+    }
+
+    public override byte[] DoFinal()
+    {
+        m_cipher.Reset();
+
+        return Array.Empty<byte>();
+    }
+
+    public override byte[] DoFinal(byte[] input, int inOff, int length)
+    {
+        if (length < 1)
+            return Array.Empty<byte>();
+
+        byte[] output = new byte[length];
+        m_cipher.ProcessBytes(input, inOff, length, output, 0);
+        m_cipher.Reset();
+        return output;
+    }
+
+    public override int DoFinal(Span<byte> output)
+    {
+        m_cipher.Reset();
+        return 0;
+    }
+
+    public override int DoFinal(ReadOnlySpan<byte> input, Span<byte> output)
+    {
+        m_cipher.ProcessBytes(input, output);
+        m_cipher.Reset();
+        return input.Length;
+    }
+
+    public override void Reset()
+    {
+        m_cipher.Reset();
+    }
+}
