@@ -18,7 +18,7 @@ handling and path validation, and OpenSSL PEM interoperability.
 Target framework: .NET 10 or later. There is no multi-targeting; netstandard
 and .NET Framework are not supported.
 
-Provenance: CodeBrix.Cryptography is a port of BouncyCastle.NET 2.7.0
+Provenance: CodeBrix.Cryptography is a port of BouncyCastle.NET
 (https://github.com/bcgit/bc-csharp), narrowed to a single modern .NET target
 and rehomed under the CodeBrix.Cryptography namespace. Every public type keeps
 its upstream name, member names and signatures, so the library is a drop-in

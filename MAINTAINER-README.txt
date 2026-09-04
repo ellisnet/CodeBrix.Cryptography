@@ -37,11 +37,15 @@ REPOSITORY LAYOUT
     THIRD-PARTY-NOTICES.txt Attribution for the ported upstream sources and the
                             components they incorporate; packed into the nupkg.
     icon-codebrix-128.png   Package icon; packed into the nupkg.
+    global.json             Selects the Microsoft.Testing.Platform test runner.
+                            Does NOT pin an SDK version. See TESTING below.
     CodeBrix.Cryptography.slnx
-                            Solution: "Solution Items" folder (AGENT-README.txt,
-                            icon, LICENSE, README.md, THIRD-PARTY-NOTICES.txt), a
-                            "Tests" folder holding the test project, and the
-                            library project.
+                            Solution: "Solution Items" folder (.gitignore,
+                            AGENT-README.txt, EXTRAS-README.txt, global.json,
+                            icon-codebrix-128.png, LICENSE,
+                            MAINTAINER-README.txt, README-INDEX.txt, README.md,
+                            THIRD-PARTY-NOTICES.txt), a "Tests" folder holding
+                            the test project, and the library project.
     src/CodeBrix.Cryptography/
                             The library. Folder layout matches sub-namespace,
                             one folder level per namespace segment, so
@@ -123,6 +127,15 @@ TESTING
 
 That runs clean out of the box. No external checkout, download or environment
 variable is needed for the default run.
+
+The test runner is Microsoft.Testing.Platform, selected by global.json at the
+repository root:
+
+    { "test": { "runner": "Microsoft.Testing.Platform" } }
+
+That file pins no SDK version, so the newest installed .NET 10 SDK is still
+used. Keep it committed -- without it, `dotnet test` falls back to the older
+VSTest bridge.
 
 The suite is the upstream NUnit suite translated to xUnit.v3. Fixtures come
 from three places:

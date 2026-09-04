@@ -7,6 +7,27 @@ CodeBrix.Cryptography supports applications and assemblies that target Microsoft
 Microsoft .NET version 10.0 is a Long-Term Supported (LTS) version of .NET, and was released on Nov 11, 2025; and will be actively supported by Microsoft until Nov 14, 2028.
 Please update your C#/.NET code and projects to the latest LTS version of Microsoft .NET.
 
+## Installation
+
+```
+dotnet add package CodeBrix.Cryptography.MitLicenseForever
+```
+
+Note that the NuGet package ID and the namespace are different - there is no package named plain `CodeBrix.Cryptography`:
+
+* NuGet package ID: `CodeBrix.Cryptography.MitLicenseForever`
+* Assembly and primary namespace: `CodeBrix.Cryptography` - i.e. `using CodeBrix.Cryptography;`
+
+The public API is spread across a family of sub-namespaces - `CodeBrix.Cryptography.Crypto` and its `Engines` / `Modes` / `Parameters` / `Generators` / `Operators` children, `.Asn1` and its per-specification children, `.Security`, `.Math`, `.X509`, `.Cms`, `.Pkcs`, `.Bcpg`, `.OpenSsl`, `.Tls` and others - so most code imports several of them; see the samples below.
+
+XML documentation (IntelliSense) ships alongside the assembly.
+
+The package has no NuGet dependencies of its own; it builds only against the .NET base class libraries.
+
+### Runtime configuration
+
+A number of hardening limits - ASN.1 parse depth, Argon2 and PBE cost ceilings, key-size ceilings and similar - are configurable at run time. Each is looked up first in the thread-local property table exposed by `CodeBrix.Cryptography.Utilities.Properties`, then in the process environment. The keys are spelled `Org.BouncyCastle.Asn1.MaxDepth`, `Org.BouncyCastle.Asn1.MaxLimit`, `Org.BouncyCastle.Argon2.MaxPasses`, `Org.BouncyCastle.Pbe.MaxIterationCount` and so on; `Properties` declares the full set as `public static readonly string` fields. Change them only if you need to raise or lower the defaults - the shipped values are the safe ones.
+
 ## CodeBrix.Cryptography supports:
 
 * **ASN.1** — DER/BER/DL encoding and parsing, and the object-identifier and structure definitions for X.509, PKCS, CMS, CMP, CRMF, OCSP, TSP, X9.62, NIST, SEC, GNU, Rosstandart and many other specifications
@@ -24,9 +45,9 @@ Please update your C#/.NET code and projects to the latest LTS version of Micros
 
 
 > **The post-quantum algorithms should be considered EXPERIMENTAL and subject to change or removal.**
-> This carries over from upstream BouncyCastle.NET, which states the same about its NIST
-> Post-Quantum Cryptography Standardization implementations. Treat their APIs and encodings as
-> unstable across releases, and do not depend on them for long-lived data.
+> They implement the NIST Post-Quantum Cryptography Standardization candidates and standards, whose
+> APIs and encodings should be treated as unstable across releases. Do not depend on them for
+> long-lived data.
 
 ## Sample Code
 
@@ -108,15 +129,17 @@ Console.WriteLine(certificate.SubjectDN);          // CN=example.test,O=CodeBrix
 Console.WriteLine(certificate.SigAlgName);         // SHA-256withRSA
 ```
 
-## Migrating from BouncyCastle.Cryptography
+## Documentation
 
-1. Replace the `BouncyCastle.Cryptography` package reference with `CodeBrix.Cryptography.MitLicenseForever`.
-2. Replace `Org.BouncyCastle` with `CodeBrix.Cryptography` in your `using` directives and any fully-qualified type names.
+The NuGet package includes `AGENT-README.txt`, a complete API reference and usage guide written for AI coding agents - point your agent at that file when it is writing code against this library.
 
-Type names, member names and signatures are unchanged. The runtime configuration keys read from environment variables (`Org.BouncyCastle.Asn1.MaxDepth` and friends) also keep their original spelling, so existing configuration continues to apply.
+Additional sample code and usage examples are available in the `CodeBrix.Cryptography.Tests` project, which is the richest set of worked examples available for this library:
+https://github.com/ellisnet/CodeBrix.Cryptography/tree/main/tests/CodeBrix.Cryptography.Tests
 
 ## License
 
-The project is licensed under the MIT License. see: https://en.wikipedia.org/wiki/MIT_License
+CodeBrix.Cryptography is licensed under the MIT License - see the
+[LICENSE](https://github.com/ellisnet/CodeBrix.Cryptography/blob/main/LICENSE) file.
 
-CodeBrix.Cryptography is a fork of BouncyCastle.NET, which is Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc. and is also MIT licensed. See `THIRD-PARTY-NOTICES.txt` for the full attribution of BouncyCastle.NET and of the JZlib, Apache Ant BZip2, Falcon and Blake2Fast components it incorporates.
+For licensing and provenance information about the open source code included in
+this package, see [THIRD-PARTY-NOTICES.txt](https://github.com/ellisnet/CodeBrix.Cryptography/blob/main/THIRD-PARTY-NOTICES.txt).

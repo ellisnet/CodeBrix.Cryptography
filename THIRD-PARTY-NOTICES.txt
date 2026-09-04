@@ -25,7 +25,7 @@ Note that NuGet package dependencies are NOT listed here -- those packages ship
 with their own license and notice files, and their source code is not
 incorporated into this repository. The library project has no NuGet
 dependencies at all. The test project references, for testing only: xunit.v3,
-xunit.runner.visualstudio, Microsoft.NET.Test.Sdk, coverlet.collector and
+xunit.runner.visualstudio, Microsoft.NET.Test.Sdk and
 SilverAssertions.ApacheLicenseForever.
 
 ================================================================================
