@@ -1003,6 +1003,24 @@ ToX509Certificate, GetRsaKeyPair(RSA), GetRsaPublicKey(RSA), ToRSA,
 GetDsaKeyPair(DSA), GetECDsaKeyPair(ECDsa), GetKeyPair(AsymmetricAlgorithm),
 GetSubjectPublicKeyInfo(X509Certificate2).
 
+The ToRSA overloads without CspParameters use RSA.Create(RSAParameters), so
+public keys, private CRT keys and RsaPrivateKeyStructure values can be converted
+on Windows, Linux, macOS and Android using the platform-default RSA provider.
+Browser is unsupported. Dispose the returned RSA instance when finished:
+
+    using RSA rsa = DotNetUtilities.ToRSA(privateCrtKey);
+
+For explicit control of the .NET instance, use ToRSAParameters(...) with
+RSA.Create() and ImportParameters(...). Pass private keys as
+RsaPrivateCrtKeyParameters or RsaPrivateKeyStructure to include the CRT fields;
+the RsaKeyParameters overload is intended for public keys.
+
+The overloads accepting CspParameters remain Windows-only and carry
+[SupportedOSPlatform("windows")]. Use those only when a Windows CSP provider or
+key container is specifically required. The portable overloads no longer promise
+an RSACryptoServiceProvider or create a named CSP container on Windows; consume
+the returned object through its declared RSA type.
+
 
 X.509 CERTIFICATES AND CRLs
 ---------------------------

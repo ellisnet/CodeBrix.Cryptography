@@ -257,9 +257,9 @@ public static class DotNetUtilities
     /// </summary>
     /// <param name="rsaKey">The BC RSA public key.</param>
     /// <returns>A .NET <see cref="RSA"/> instance.</returns>
-    // TODO This appears to not work for private keys (when no CRT info)
-    [SupportedOSPlatform("windows")]
-    public static RSA ToRSA(RsaKeyParameters rsaKey) => CreateRSAProvider(ToRSAParameters(rsaKey));
+    /// <remarks>Uses the platform-default RSA implementation. The caller must dispose the returned instance.</remarks>
+    [UnsupportedOSPlatform("browser")]
+    public static RSA ToRSA(RsaKeyParameters rsaKey) => RSA.Create(ToRSAParameters(rsaKey));
 
     /// <summary>
     /// Create a .NET <see cref="RSA"/> instance from Bouncy Castle RSA public key parameters.
@@ -277,8 +277,9 @@ public static class DotNetUtilities
     /// </summary>
     /// <param name="privKey">The BC RSA private CRT keys.</param>
     /// <returns>A .NET <see cref="RSA"/> instance.</returns>
-    [SupportedOSPlatform("windows")]
-    public static RSA ToRSA(RsaPrivateCrtKeyParameters privKey) => CreateRSAProvider(ToRSAParameters(privKey));
+    /// <remarks>Uses the platform-default RSA implementation. The caller must dispose the returned instance.</remarks>
+    [UnsupportedOSPlatform("browser")]
+    public static RSA ToRSA(RsaPrivateCrtKeyParameters privKey) => RSA.Create(ToRSAParameters(privKey));
 
     /// <summary>
     /// Create a .NET <see cref="RSA"/> instance from Bouncy Castle RSA private CRT parameters and CSP info.
@@ -295,8 +296,9 @@ public static class DotNetUtilities
     /// </summary>
     /// <param name="privKey">The BC RSA private CRT keys.</param>
     /// <returns>A .NET <see cref="RSA"/> instance.</returns>
-    [SupportedOSPlatform("windows")]
-    public static RSA ToRSA(RsaPrivateKeyStructure privKey) => CreateRSAProvider(ToRSAParameters(privKey));
+    /// <remarks>Uses the platform-default RSA implementation. The caller must dispose the returned instance.</remarks>
+    [UnsupportedOSPlatform("browser")]
+    public static RSA ToRSA(RsaPrivateKeyStructure privKey) => RSA.Create(ToRSAParameters(privKey));
 
     /// <summary>
     /// Create a .NET <see cref="RSA"/> instance from Bouncy Castle RSA private CRT structure and CSP info.
@@ -364,26 +366,6 @@ public static class DotNetUtilities
 
     private static byte[] ConvertRSAParametersField(BigInteger n, int size) =>
         BigIntegers.AsUnsignedByteArray(size, n);
-
-    // TODO Why do we use CspParameters instead of just RSA.Create in methods below?
-//        private static RSA CreateRSA(RSAParameters rp)
-//        {
-//#if NETCOREAPP2_0_OR_GREATER || NET472_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-//            return RSA.Create(rp);
-//#else
-//            var rsa = RSA.Create();
-//            rsa.ImportParameters(rp);
-//            return rsa;
-//#endif
-//        }
-
-    [SupportedOSPlatform("windows")]
-    private static RSACryptoServiceProvider CreateRSAProvider(RSAParameters rp)
-    {
-        CspParameters csp = new CspParameters();
-        csp.KeyContainerName = string.Format("BouncyCastle-{0}", Guid.NewGuid());
-        return CreateRSAProvider(rp, csp);
-    }
 
     [SupportedOSPlatform("windows")]
     private static RSACryptoServiceProvider CreateRSAProvider(RSAParameters rp, CspParameters csp)

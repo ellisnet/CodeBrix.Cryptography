@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using CodeBrix.Cryptography.Asn1;
+using CodeBrix.Cryptography.Asn1.Pkcs;
 using CodeBrix.Cryptography.Asn1.X509;
 using CodeBrix.Cryptography.Crypto;
 using CodeBrix.Cryptography.Crypto.Generators;
@@ -49,19 +49,26 @@ public class TestDotNetUtilities
     [Fact]
     public void TestRsaInterop()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return;
+        using RSA original = RSA.Create(2048);
+        AsymmetricCipherKeyPair pair = DotNetUtilities.GetRsaKeyPair(original);
+        var privateKey = (RsaPrivateCrtKeyParameters)pair.Private;
+        var structure = new RsaPrivateKeyStructure(privateKey.Modulus, privateKey.PublicExponent,
+            privateKey.Exponent, privateKey.P, privateKey.Q, privateKey.DP, privateKey.DQ, privateKey.QInv);
 
-        for (int i = 0; i < 10; ++i)
+        using RSA publicRsa = DotNetUtilities.ToRSA((RsaKeyParameters)pair.Public);
+        using RSA privateRsa = DotNetUtilities.ToRSA(privateKey);
+        using RSA structureRsa = DotNetUtilities.ToRSA(structure);
+        byte[] data = { 1, 2, 3, 4, 5 };
+
+        byte[] originalSignature = original.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        Assert.True(publicRsa.VerifyData(data, originalSignature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+
+        foreach (RSA converted in new[] { privateRsa, structureRsa })
         {
-            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(512);
-            RSAParameters rp = rsa.ExportParameters(true);
-            AsymmetricCipherKeyPair kp = DotNetUtilities.GetRsaKeyPair(rp);
-
-            DotNetUtilities.ToRSA((RsaKeyParameters)kp.Public);
-            // TODO This method appears to not work for private keys (when no CRT info)
-            //DotNetUtilities.ToRSA((RsaKeyParameters)kp.Private);
-            DotNetUtilities.ToRSA((RsaPrivateCrtKeyParameters)kp.Private);
+            byte[] signature = converted.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            Assert.True(original.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
+            byte[] encrypted = publicRsa.Encrypt(data, RSAEncryptionPadding.OaepSHA1);
+            Assert.Equal(data, converted.Decrypt(encrypted, RSAEncryptionPadding.OaepSHA1));
         }
     }
 
