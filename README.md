@@ -31,12 +31,12 @@ A number of hardening limits - ASN.1 parse depth, Argon2 and PBE cost ceilings, 
 ## CodeBrix.Cryptography supports:
 
 * **ASN.1** — DER/BER/DL encoding and parsing, and the object-identifier and structure definitions for X.509, PKCS, CMS, CMP, CRMF, OCSP, TSP, X9.62, NIST, SEC, GNU, Rosstandart and many other specifications
-* **Block and stream ciphers** — AES (with x86 AES-NI acceleration), ARIA, Blowfish, Camellia, CAST5/CAST6, ChaCha20, DES/Triple-DES, GOST 28147/Kuznyechik, IDEA, Noekeon, RC2/RC4/RC5/RC6, Rijndael, SEED, Serpent, Salsa20, SM4, Threefish, Twofish, XSalsa20 and more
-* **Modes and padding** — CBC, CCM, CFB, CTS, EAX, ECB, GCM (with carry-less-multiply acceleration), GOFB, KCCM, KGCM, OCB, OFB, OpenPGP CFB, SIC/CTR, plus PKCS#7, ISO 7816-4, ISO 10126-2, TBC, X9.23 and zero-byte padding
+* **Block and stream ciphers** — AES (with x86 AES-NI acceleration), ARIA, Blowfish, Camellia, CAST5/CAST6, ChaCha20, DES/Triple-DES, GOST 28147, IDEA, Noekeon, RC2/RC4/RC5/RC6, Rijndael, SEED, Serpent, Salsa20, SM4, Threefish, Twofish, XSalsa20 and more
+* **Modes and padding** — CBC, CCM, CFB, CTS, EAX, ECB, GCM (with carry-less-multiply acceleration), GOFB, KCCM, KCTR, OCB, OFB, OpenPGP CFB, SIC/CTR, plus PKCS#7, ISO 7816-4, ISO 10126-2, TBC, X9.23 and zero-byte padding
 * **Digests and XOFs** — SHA-1, the SHA-2 family, SHA-3, SHAKE, cSHAKE, KMAC, TupleHash, ParallelHash, BLAKE2b/BLAKE2s (x86-accelerated) and BLAKE3, Haraka, Keccak, MD2/MD4/MD5, RIPEMD, SM3, Skein, Whirlpool, GOST3411 and the DSTU/Ukrainian digests
-* **MACs** — CBC-MAC, CMAC, GMAC, HMAC, KGMAC, Poly1305, SipHash, SkeinMac, DSTU7564Mac and more
+* **MACs** — CBC-MAC, CMAC, GMAC, HMAC, KMAC, Poly1305, SipHash, SkeinMac, Dstu7564Mac, Dstu7624Mac and more
 * **Public-key cryptography** — RSA, DSA, Diffie-Hellman, ElGamal, ECDSA, ECDH/ECMQV, ECGOST, EdDSA (Ed25519 / Ed448), X25519 / X448, SM2, and the associated key generation, key agreement and signature schemes
-* **Post-quantum cryptography** — ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+), LMS/HSS, XMSS/XMSS^MT, Falcon, BIKE, HQC, Classic McEliece, Frodo, NTRU / NTRU Prime, Picnic, SABER and SNOVA
+* **Post-quantum cryptography** — ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+), LMS/HSS, Falcon, BIKE, HQC, Classic McEliece, Frodo, NTRU / NTRU Prime, Picnic and SABER
 * **Key derivation and password hashing** — Argon2, bcrypt, scrypt, HKDF, PBKDF1/PBKDF2, PKCS#12 KDF, Concatenation and X9.63 KDFs, and the TLS/SSL PRFs
 * **TLS and DTLS** — a full TLS 1.0–1.3 and DTLS 1.0–1.2 client and server implementation, with pluggable crypto, PSK, SRP, raw public keys and certificate-type negotiation
 * **OpenPGP** — key ring generation and management, encryption, signing, compression, ASCII armor and cleartext-signed messages

@@ -258,13 +258,13 @@ RANDOMNESS
 
 SecureRandom is the source every generator in the library expects. Prefer it
 over System.Random and reuse one instance. CryptoServicesRegistrar.GetSecureRandom()
-(namespace CodeBrix.Cryptography.Crypto) returns a shared instance, and
-GetSecureRandom(SecureRandom) returns the argument when it is non-null and the
-shared instance otherwise — useful when a SecureRandom parameter is optional.
+(namespace CodeBrix.Cryptography.Crypto) returns a new instance on each call,
+and GetSecureRandom(SecureRandom) returns the argument when it is non-null and
+a new instance otherwise — useful when a SecureRandom parameter is optional.
 
 Deterministic / NIST DRBG variants live in
 CodeBrix.Cryptography.Crypto.Prng: SP800SecureRandomBuilder,
-X931SecureRandomBuilder, DigestRandomGenerator, VMPCRandomGenerator,
+X931SecureRandomBuilder, DigestRandomGenerator, VmpcRandomGenerator,
 CryptoApiRandomGenerator, and the Prng.Drbg engines behind them.
 
 
@@ -375,7 +375,7 @@ a buffered cipher that applies padding.
     n += cipher.DoFinal(output, n);
 
 Modes: CbcBlockCipher, CfbBlockCipher, OfbBlockCipher, SicBlockCipher (CTR),
-EcbBlockCipher, CtsBlockCipher, GOFBBlockCipher, KCtrBlockCipher,
+EcbBlockCipher, CtsBlockCipher, GOfbBlockCipher, KCtrBlockCipher,
 OpenPgpCfbBlockCipher.
 
 Paddings (all IBlockCipherPadding, namespace Crypto.Paddings): Pkcs7Padding,
@@ -384,17 +384,17 @@ ZeroBytePadding.
 
 Engines (namespace Crypto.Engines) include AesEngine, AesEngine_X86,
 AesLightEngine, AriaEngine, BlowfishEngine, CamelliaEngine, Cast5Engine,
-Cast6Engine, DesEngine, DesEdeEngine, Dstu7624Engine, GOST28147Engine,
+Cast6Engine, DesEngine, DesEdeEngine, Dstu7624Engine, Gost28147Engine,
 IdeaEngine, NoekeonEngine, RC2Engine, RC532Engine, RC564Engine, RC6Engine,
-RijndaelEngine, SEEDEngine, SerpentEngine, TnepresEngine, SkipjackEngine,
-SM4Engine, TEAEngine, XTEAEngine, ThreefishEngine, TwofishEngine; stream
+RijndaelEngine, SeedEngine, SerpentEngine, TnepresEngine, SkipjackEngine,
+SM4Engine, TeaEngine, XteaEngine, ThreefishEngine, TwofishEngine; stream
 ciphers ChaChaEngine, ChaCha7539Engine, XChaCha20Engine, Salsa20Engine,
-XSalsa20Engine, HC128Engine, HC256Engine, ISAACEngine, RC4Engine, VMPCEngine,
-VMPCKSA3Engine, Grain128AEADEngine, SparkleEngine, AsconEngine; key wrapping
+XSalsa20Engine, HC128Engine, HC256Engine, IsaacEngine, RC4Engine, VmpcEngine,
+VmpcKsa3Engine, Grain128AeadEngine, SparkleEngine, AsconEngine; key wrapping
 AesWrapEngine, AesWrapPadEngine, AriaWrapEngine, AriaWrapPadEngine,
-CamelliaWrapEngine, DesEdeWrapEngine, RC2WrapEngine, SEEDWrapEngine,
-RFC3211WrapEngine, RFC3394WrapEngine, Rfc5649WrapEngine, Dstu7624WrapEngine;
-and asymmetric RsaEngine, RSABlindedEngine, ElGamalEngine, NaccacheSternEngine,
+CamelliaWrapEngine, DesEdeWrapEngine, RC2WrapEngine, SeedWrapEngine,
+Rfc3211WrapEngine, Rfc3394WrapEngine, Rfc5649WrapEngine, Dstu7624WrapEngine;
+and asymmetric RsaEngine, RsaBlindedEngine, ElGamalEngine, NaccacheSternEngine,
 SM2Engine, IesEngine.
 
 Format-preserving encryption lives in CodeBrix.Cryptography.Crypto.Fpe:
@@ -467,18 +467,18 @@ Name- and OID-driven resolution, when the algorithm is chosen at runtime:
         public static byte[] DoFinal(IMac mac, byte[] input)
 
 Digests (namespace Crypto.Digests): Sha1Digest, Sha224Digest, Sha256Digest,
-Sha384Digest, Sha512Digest, Sha512tDigest, SHA3Digest, ShakeDigest,
-CSHAKEDigest, KeccakDigest, Blake2bDigest, Blake2sDigest, Blake2xsDigest,
+Sha384Digest, Sha512Digest, Sha512tDigest, Sha3Digest, ShakeDigest,
+CShakeDigest, KeccakDigest, Blake2bDigest, Blake2sDigest, Blake2xsDigest,
 Blake3Digest, MD2Digest, MD4Digest, MD5Digest, RipeMD128/160/256/320Digest,
-SM3Digest, SkeinDigest, WhirlpoolDigest, GOST3411Digest,
-GOST3411_2012_256Digest, GOST3411_2012_512Digest, DSTU7564Digest,
+SM3Digest, SkeinDigest, WhirlpoolDigest, Gost3411Digest,
+Gost3411_2012_256Digest, Gost3411_2012_512Digest, Dstu7564Digest,
 Haraka256Digest, Haraka512Digest, AsconHash256, AsconXof128, AsconCXof128,
-ISAPDigest, PhotonBeetleDigest, ParallelHash, TupleHash, NullDigest,
+IsapDigest, PhotonBeetleDigest, ParallelHash, TupleHash, NullDigest,
 NonMemoableDigest, ShortenedDigest, Prehash.
 
 MACs (namespace Crypto.Macs): HMac, CMac, GMac, Poly1305, SipHash, KMac,
-SkeinMac, CbcBlockCipherMac, CfbBlockCipherMac, ISO9797Alg3Mac, GOST28147Mac,
-DSTU7564Mac, DSTU7624Mac, VMPCMac.
+SkeinMac, CbcBlockCipherMac, CfbBlockCipherMac, ISO9797Alg3Mac, Gost28147Mac,
+Dstu7564Mac, Dstu7624Mac, VmpcMac.
 
 
 KEY DERIVATION AND PASSWORD HASHING
@@ -561,7 +561,7 @@ keySize and ivSize on those three methods are in BITS, not bytes.
 
 Sibling generators: Pkcs5S1ParametersGenerator (PBKDF1),
 Pkcs12ParametersGenerator (the PKCS#12 KDF),
-OpenSSLPBEParametersGenerator (EVP_BytesToKey).
+OpenSslPbeParametersGenerator (EVP_BytesToKey).
 
 HKDF (RFC 5869):
 
@@ -584,8 +584,8 @@ HKDF (RFC 5869):
     hkdf.GenerateBytes(okm, 0, okm.Length);
 
 Other KDFs in Crypto.Generators: Kdf1BytesGenerator, Kdf2BytesGenerator
-(X9.63/ISO 18033), Mgf1BytesGenerator, KDFCounterBytesGenerator,
-KDFFeedbackBytesGenerator, KDFDoublePipelineIterationBytesGenerator
+(X9.63/ISO 18033), Mgf1BytesGenerator, KdfCounterBytesGenerator,
+KdfFeedbackBytesGenerator, KdfDoublePipelineIterationBytesGenerator
 (SP 800-108), plus the concatenation KDFs under Crypto.Agreement.Kdf.
 
 
@@ -626,7 +626,7 @@ Raw RSA is never used bare — wrap the engine in a padding scheme:
         public virtual int GetInputBlockSize()
         public virtual int GetOutputBlockSize()
         public virtual byte[] ProcessBlock(byte[] inBuf, int inOff, int inLen)
-    // RSABlindedEngine is the side-channel-hardened variant; prefer it for
+    // RsaBlindedEngine is the side-channel-hardened variant; prefer it for
     // private-key operations.
 
     // namespace CodeBrix.Cryptography.Crypto.Encodings
@@ -645,7 +645,7 @@ Raw RSA is never used bare — wrap the engine in a padding scheme:
         public OaepEncoding(IAsymmetricBlockCipher cipher, IDigest hash,
                     IDigest mgf1Hash, byte[] encodingParams)
 
-    var rsa = new OaepEncoding(new RSABlindedEngine(), new Sha256Digest());
+    var rsa = new OaepEncoding(new RsaBlindedEngine(), new Sha256Digest());
     rsa.Init(forEncryption: true, pair.Public);
     byte[] wrapped = rsa.ProcessBlock(sessionKey, 0, sessionKey.Length);
 
@@ -697,8 +697,8 @@ SIGNATURES — THE ISigner FACADE
     bool ok = verifier.VerifySignature(signature);
 
 Concrete signers in CodeBrix.Cryptography.Crypto.Signers: DsaSigner,
-DsaDigestSigner, ECDsaSigner, ECNRSigner, ECGOST3410Signer, Dstu4145Signer,
-GOST3410Signer, GOST3410DigestSigner, Ed25519Signer, Ed25519ctxSigner,
+DsaDigestSigner, ECDsaSigner, ECNRSigner, ECGost3410Signer, Dstu4145Signer,
+Gost3410Signer, Gost3410DigestSigner, Ed25519Signer, Ed25519ctxSigner,
 Ed25519phSigner, Ed448Signer, Ed448phSigner, RsaDigestSigner, PssSigner,
 Iso9796d2Signer, Iso9796d2PssSigner, X931Signer, SM2Signer, GenericSigner,
 MLDsaSigner, HashMLDsaSigner, SlhDsaSigner, HashSlhDsaSigner. The k-value
@@ -709,14 +709,20 @@ RandomDsaKCalculator.
 ELLIPTIC CURVE, EdDSA AND X25519
 --------------------------------
 
-Curve lookup — four registries, all with the same static shape
+Curve lookup — seven registries unioned by ECNamedCurveTable, plus
+CustomNamedCurves, all with the same static shape
 (GetByName / GetByOid / GetName / GetOid / Names / *Lazy):
 
-    CodeBrix.Cryptography.Asn1.X9.ECNamedCurveTable      // the union of them all
+    CodeBrix.Cryptography.Asn1.X9.ECNamedCurveTable      // the union of the seven
+    CodeBrix.Cryptography.Asn1.X9.X962NamedCurves        // prime*/c2pnb*/c2tnb*
     CodeBrix.Cryptography.Asn1.Sec.SecNamedCurves        // secp*/sect*
     CodeBrix.Cryptography.Asn1.Nist.NistNamedCurves      // P-256, P-384, ...
     CodeBrix.Cryptography.Asn1.TeleTrust.TeleTrusTNamedCurves
-    CodeBrix.Cryptography.Crypto.EC.CustomNamedCurves    // optimised field impls
+    CodeBrix.Cryptography.Asn1.Anssi.AnssiNamedCurves
+    CodeBrix.Cryptography.Asn1.CryptoPro.ECGost3410NamedCurves
+    CodeBrix.Cryptography.Asn1.GM.GMNamedCurves          // sm2p256v1, wapip192v1
+    CodeBrix.Cryptography.Crypto.EC.CustomNamedCurves    // optimised field impls;
+                                                         //   not in the union
 
         public static X9ECParameters GetByName(string name)
         public static X9ECParameters GetByOid(DerObjectIdentifier oid)
@@ -1103,7 +1109,7 @@ X.509 CERTIFICATES AND CRLs
 X509CertificateParser reads DER or PEM, single objects or PKCS#7/certificate
 bundles. CheckValidity() throws (CertificateNotYetValidException /
 CertificateExpiredException); IsValidNow returns a bool. Verify() throws on a
-bad signature; IsSignatureValid() returns a bool.
+bad signature; IsSignatureValid(key) returns a bool.
 
 Distinguished names and extension values come from
 CodeBrix.Cryptography.Asn1.X509:
@@ -1662,7 +1668,6 @@ configuration.
         public virtual void CloseInput()
 
     public abstract class AbstractTlsClient : AbstractTlsPeer, TlsClient
-        // the one member you MUST implement:
         public abstract TlsAuthentication GetAuthentication();
         public override ProtocolVersion[] GetProtocolVersions()
         public override int[] GetCipherSuites()
@@ -1673,10 +1678,12 @@ configuration.
         public virtual void NotifySelectedCipherSuite(int selectedCipherSuite)
         public virtual void ProcessServerExtensions(
                     IDictionary<int, byte[]> serverExtensions)
-        protected override int[] GetSupportedCipherSuites()
 
     public abstract class DefaultTlsClient : AbstractTlsClient
+        // derive from this class; the one member you MUST implement is
+        // GetAuthentication()
         public DefaultTlsClient(TlsCrypto crypto)
+        protected override int[] GetSupportedCipherSuites()
     // DefaultTlsServer / AbstractTlsServer are the server-side peers;
     // PskTlsClient / PskTlsServer and SrpTlsClient / SrpTlsServer cover
     // pre-shared-key and SRP handshakes.
@@ -1832,7 +1839,7 @@ OCSP AND TIMESTAMPING (TSP)
         public void Validate(TimeStampRequest request)
         public byte[] GetEncoded()
     // TimeStampResponseGenerator and TimeStampTokenGenerator build responses;
-    // TSPAlgorithms holds the permitted digest OIDs.
+    // TspAlgorithms holds the permitted digest OIDs.
 
 CMP (RFC 4210) and CRMF (RFC 4211) follow the same builder idiom:
 ProtectedPkiMessageBuilder / ProtectedPkiMessage / GeneralPkiMessage and
@@ -2150,7 +2157,8 @@ EXAMPLE 2 — RSA key generation, signing and verification
 Signature mechanism names accepted by SignerUtilities include
 "SHA256withRSA", "SHA384withRSA", "SHA512withRSA",
 "SHA256withRSAandMGF1" (PSS), "SHA256withECDSA", "SHA256withDSA",
-"Ed25519", "Ed448", "SHA256withSM2", "ML-DSA", "SLH-DSA".
+"Ed25519", "Ed448", "SHA256withSM2", and the ML-DSA and SLH-DSA
+parameter-set names such as "ML-DSA-65" and "SLH-DSA-SHA2-128S".
 
 
 EXAMPLE 3 — EC key generation, ECDH and a derived AES key
@@ -2551,7 +2559,8 @@ PERFORMANCE TIPS
 
   * Reuse one SecureRandom. Constructing one seeds a DRBG; constructing many in
     a loop is pure overhead. Pass it into the generators and factories that
-    accept one, or use CryptoServicesRegistrar.GetSecureRandom().
+    accept one. CryptoServicesRegistrar.GetSecureRandom() builds a new
+    instance on every call, so call it once and keep the result.
 
   * Use AesUtilities.CreateEngine() rather than `new AesEngine()`. It returns
     the AES-NI-backed AesEngine_X86 when the CPU supports it; AesUtilities
@@ -2574,7 +2583,7 @@ PERFORMANCE TIPS
 
   * RSA key generation at 3072 bits and above is measured in seconds; do it
     once, off the request path, and persist the key. RSA private-key operations
-    should use RSABlindedEngine, which is both safer and only marginally
+    should use RsaBlindedEngine, which is both safer and only marginally
     slower.
 
   * Password KDFs are slow ON PURPOSE. Tune the work factor (Argon2 memory and
@@ -2641,7 +2650,7 @@ COMMON PITFALLS TO AVOID
 
   * Raw RSA cannot encrypt more than GetInputBlockSize() bytes, and raw
     RsaEngine has no padding at all. Always wrap it: OaepEncoding for
-    encryption, and prefer RSABlindedEngine over RsaEngine for private-key
+    encryption, and prefer RsaBlindedEngine over RsaEngine for private-key
     operations.
 
   * An ECDH/X25519 agreement result is NOT a key. Run it through a KDF (HKDF,
